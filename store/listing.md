@@ -33,4 +33,12 @@ First release: glance screen, priority-grouped task list with tap-to-complete, T
   Portal's 24×24 pixel editor for the store listing's foreground/icon field.
 - **Background**: `store/background.png`, greyscale. Portal upload form states the exact required
   pixel size on the page — resize this to match if it differs from the placeholder's 1200×600.
-- **Screenshots**: `store/screenshots/` (captured with the simulator's screenshot API, not mocked up).
+- **Screenshots**: `store/screenshots/`, captured with the simulator's screenshot API (real renders,
+  not mockups) against the built-in mock task data — every task name shown is fictional, not from any
+  real Sunsama account:
+  1. `1-face.png` — glance screen (open count, clock, next task)
+  2. `2-tasks-grouped.png` — task list grouped by priority
+  3. `3-task-view-full.png` — Task View: description + checkable subtasks
+  4. `4-focus-minimal.png` — Focus mode (distraction-free)
+  5. `5-focus-meeting-banner.png` — Focus mode with the upcoming-meeting banner
+  6. `6-tasks-checked-off.png` — a task just checked off from the list
