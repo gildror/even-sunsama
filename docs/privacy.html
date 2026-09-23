@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy – Tasks for Sunsama</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; padding: 24px 16px 64px; max-width: 640px; margin: 0 auto; font: 16px/1.55 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  h1 { font-size: 22px; } h2 { font-size: 17px; margin-top: 24px; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<h1>Privacy policy – Tasks for Sunsama</h1>
+<p><em>Last updated: 23 September 2026.</em> Tasks for Sunsama is an independent plugin for Even Realities G2 glasses made by Gil Dror. It is not affiliated with Sunsama or Even Realities.</p>
+
+<h2>What the plugin does with your data</h2>
+<p>The plugin shows your Sunsama tasks for the current day on your glasses and lets you mark them complete or incomplete. To do that it reads your task list, your account time zone, and it sends completion changes to Sunsama.</p>
+
+<h2>Where your data goes</h2>
+<ul>
+  <li>The plugin talks <strong>only</strong> to Sunsama's own API at <code>api.sunsama.com</code>. This is the single network destination declared in the plugin's manifest.</li>
+  <li>There is no server operated by the developer. Nothing about you or your tasks is sent to the developer or to any third party, and no analytics or tracking is included.</li>
+  <li>The sign-in page at <code>gildror.github.io/even-sunsama</code> is a static page served by GitHub Pages. It talks only to Sunsama; the sign-in code it shows is created in your browser and is not stored or transmitted by the page. GitHub may log ordinary web-server access data (such as your IP address) under <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>.</li>
+</ul>
+
+<h2>What is stored on your phone</h2>
+<ul>
+  <li>Your Sunsama sign-in (an OAuth refresh token and short-lived access tokens), so you do not have to sign in again.</li>
+  <li>A copy of today's task list, so the glasses can show it immediately after launch.</li>
+  <li>Your plugin settings.</li>
+</ul>
+<p>This data lives in the plugin's private storage inside the Even Realities app on your phone. It is removed when you uninstall the plugin. Tapping <strong>Disconnect</strong> in the plugin revokes the sign-in with Sunsama and deletes it from the phone. You can also revoke access from your Sunsama account settings.</p>
+
+<h2>Permissions</h2>
+<p>The plugin requests the <strong>network</strong> permission solely to reach <code>api.sunsama.com</code>. It requests no location, microphone, camera or photo access.</p>
+
+<h2>Contact</h2>
+<p>Questions: open an issue at <a href="https://github.com/gildror/even-sunsama">github.com/gildror/even-sunsama</a>.</p>
+</body>
+</html>

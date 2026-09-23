@@ -1,0 +1,30 @@
+{
+  "name": "even-sunsama",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mock": "VITE_PROVIDER=mock vite",
+    "sim": "evenhub-simulator http://localhost:5183",
+    "sim:auto": "evenhub-simulator http://localhost:5183 --automation-port 9898",
+    "qr": "evenhub qr --url http://$(ipconfig getifaddr en0):5183",
+    "auth": "node scripts/auth.mjs",
+    "probe": "node scripts/mcp-probe.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build && node scripts/check-no-secrets.mjs",
+    "ehpk": "pnpm build && evenhub pack app.json dist -o tasks-for-sunsama.ehpk --sdk-ver 0.0.15",
+    "e2e": "node scripts/e2e-sim.mjs"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "0.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}

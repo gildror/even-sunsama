@@ -1,0 +1,9 @@
+{
+  "user": {
+    "name": "Test User",
+    "email": "user@example.com",
+    "timezone": "America/New_York",
+    "currentDayForUser": "2026-09-20",
+    "calendars": []
+  }
+}

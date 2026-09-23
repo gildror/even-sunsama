@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect Tasks for Sunsama</title>
+<meta name="description" content="Sign in to Sunsama and get a sign-in code for the Tasks for Sunsama plugin on Even G2 glasses.">
+<style>
+  :root { color-scheme: light dark; --bg: #f4f4f2; --fg: #1b1b1b; --muted: #666; --card: #fff; --line: #ddd; --accent: #1b1b1b; --accent-fg: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #232323; --fg: #e5e5e5; --muted: #a3a3a3; --card: #2e2e2e; --line: #444; --accent: #e5e5e5; --accent-fg: #1b1b1b; } }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 8px 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  ol { padding-left: 20px; margin: 8px 0; }
+  li { margin: 6px 0; }
+  button { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 10px; padding: 12px 18px; font: inherit; font-weight: 600; width: 100%; }
+  button.quiet { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  textarea { width: 100%; box-sizing: border-box; min-height: 96px; margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; font: 13px/1.4 ui-monospace, Menlo, monospace; word-break: break-all; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .error { color: #c0392b; }
+  [hidden] { display: none !important; }
+  footer { margin-top: 24px; font-size: 13px; color: var(--muted); }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tasks for Sunsama</h1>
+  <p class="lead">Sign-in for the Even G2 glasses plugin. Everything here happens in your browser; your Sunsama login and tokens are never sent anywhere except Sunsama.</p>
+
+  <section id="start">
+    <p>Sign in with your Sunsama account to get a one-time <strong>sign-in code</strong> for the plugin. Sunsama's app access (MCP) requires their <strong>Pro</strong> plan.</p>
+    <button id="signin">Sign in with Sunsama</button>
+    <p id="startError" class="error" hidden></p>
+  </section>
+
+  <section id="working" hidden><p>Finishing sign-in…</p></section>
+
+  <section id="done" hidden>
+    <p><strong>Signed in.</strong> Copy this sign-in code:</p>
+    <textarea id="bundle" readonly></textarea>
+    <button id="copy">Copy code</button>
+    <p id="copied" class="muted" hidden>Copied.</p>
+    <p>Then, in the Even Realities app:</p>
+    <ol>
+      <li>Open the <strong>Home</strong> tab and tap the <strong>Tasks for Sunsama</strong> card.</li>
+      <li>Paste the code under <strong>Connect</strong> and tap <strong>Save</strong>.</li>
+    </ol>
+    <p class="muted">Treat the code like a password: anyone who has it can read and change your tasks. It stays valid until you tap Disconnect in the plugin or revoke it in Sunsama. You can close this page afterwards.</p>
+    <button id="again" class="quiet">Start over</button>
+  </section>
+
+  <footer>
+    Not affiliated with Sunsama. <a href="privacy">Privacy policy</a> · <a href="https://github.com/gildror/even-sunsama">Source</a>
+  </footer>
+</main>
+
+<script type="module">
+const ISSUER = 'https://api.sunsama.com'
+const RESOURCE = `${ISSUER}/mcp`
+const SCOPE = 'read execute offline_access'
+// The page's own URL, without query or hash, is the OAuth redirect target.
+const REDIRECT_URI = location.origin + location.pathname.replace(/index\.html$/, '')
+const KEY = 'tasks-for-sunsama.connect'
+
+const $ = id => document.getElementById(id)
+const show = id => { for (const s of ['start', 'working', 'done']) $(s).hidden = s !== id }
+const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+const random = n => b64url(crypto.getRandomValues(new Uint8Array(n)))
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') } catch { return {} } }
+const save = s => localStorage.setItem(KEY, JSON.stringify(s))
+
+async function postForm(url, params) {
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body: new URLSearchParams(params) })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(`${body.error || res.status}${body.error_description ? ': ' + body.error_description : ''}`)
+  return body
+}
+
+/** Public OAuth client for this page, registered once per browser (Sunsama supports dynamic registration). */
+async function getClientId(state) {
+  if (state.clientId && state.redirectUri === REDIRECT_URI) return state.clientId
+  const meta = await (await fetch(`${ISSUER}/.well-known/oauth-authorization-server`)).json()
+  const res = await fetch(meta.registration_endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      client_name: 'Tasks for Sunsama (Even G2)',
+      client_uri: REDIRECT_URI,
+      redirect_uris: [REDIRECT_URI],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+      scope: SCOPE,
+    }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok || !body.client_id) throw new Error(`Could not register with Sunsama (${res.status})`)
+  return body.client_id
+}
+
+async function startSignIn() {
+  $('signin').disabled = true
+  $('startError').hidden = true
+  try {
+    const state = load()
+    const clientId = await getClientId(state)
+    const verifier = random(48)
+    const csrf = random(16)
+    const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
+    save({ clientId, redirectUri: REDIRECT_URI, verifier, csrf })
+    const url = new URL(`${ISSUER}/oauth/authorize`)
+    url.search = new URLSearchParams({
+      response_type: 'code', client_id: clientId, redirect_uri: REDIRECT_URI, scope: SCOPE,
+      state: csrf, code_challenge: challenge, code_challenge_method: 'S256', resource: RESOURCE,
+    })
+    location.assign(url)
+  } catch (err) {
+    $('startError').textContent = err.message
+    $('startError').hidden = false
+    $('signin').disabled = false
+  }
+}
+
+async function finishSignIn(params) {
+  show('working')
+  const state = load()
+  try {
+    if (params.get('error')) throw new Error(`Sunsama said: ${params.get('error_description') || params.get('error')}`)
+    if (!state.verifier || params.get('state') !== state.csrf) throw new Error('This sign-in link is stale. Start over.')
+    const token = await postForm(`${ISSUER}/oauth/token`, {
+      grant_type: 'authorization_code', code: params.get('code'), redirect_uri: REDIRECT_URI,
+      client_id: state.clientId, code_verifier: state.verifier, resource: RESOURCE,
+    })
+    if (!token.refresh_token) throw new Error('Sunsama did not grant long-term access (offline_access). Start over and approve all requested access.')
+    save({ clientId: state.clientId, redirectUri: REDIRECT_URI })
+    const bundle = 'es1.' + b64url(new TextEncoder().encode(JSON.stringify({ v: 1, clientId: state.clientId, refreshToken: token.refresh_token })))
+    $('bundle').value = bundle
+    show('done')
+  } catch (err) {
+    show('start')
+    $('startError').textContent = err.message
+    $('startError').hidden = false
+  } finally {
+    // Never leave the one-time code in the address bar or browser history.
+    history.replaceState(null, '', REDIRECT_URI)
+  }
+}
+
+$('signin').addEventListener('click', startSignIn)
+$('copy').addEventListener('click', async () => {
+  const text = $('bundle').value
+  try { await navigator.clipboard.writeText(text) } catch { $('bundle').select(); document.execCommand('copy') }
+  $('copied').hidden = false
+})
+$('again').addEventListener('click', () => { $('bundle').value = ''; show('start') })
+
+const params = new URLSearchParams(location.search)
+if (params.has('code') || params.has('error')) finishSignIn(params)
+else show('start')
+</script>
+</body>
+</html>
