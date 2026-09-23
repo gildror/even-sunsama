@@ -19,7 +19,7 @@ import { buildFaceView } from '../src/glasses/screens/face'
 import { messageFor } from '../src/glasses/screens/message'
 import { MAX_ROWS, PAGE_SIZE, buildTasksView } from '../src/glasses/screens/tasks'
 
-const task = (id: string, completed = false, title = `Task ${id}`, priority: Priority = null): Task => ({
+const task = (id: string, completed = false, title = `Task ${id}`, priority: Priority = null, channel = ''): Task => ({
   id,
   title,
   completed,
@@ -28,6 +28,7 @@ const task = (id: string, completed = false, title = `Task ${id}`, priority: Pri
   subtasksDone: 0,
   subtasksTotal: 0,
   priority,
+  channel,
 })
 const state = (tasks: Task[], patch: Partial<StoreState> = {}): StoreState => ({
   day: '2026-09-20',
@@ -121,7 +122,7 @@ describe('format', () => {
   })
 
   it('strips Sunsama rich-text HTML down to plain lines', () => {
-    expect(stripHtml('<p><strong>Planned</strong></p><ul><li>One</li><li>Two</li></ul>')).toBe('Planned\n• One\n• Two')
+    expect(stripHtml('<p><strong>Planned</strong></p><ul><li>One</li><li>Two</li></ul>')).toBe('Planned\n- One\n- Two')
     expect(stripHtml('Line one<br/>Line two &amp; more &nbsp;padded')).toBe('Line one\nLine two & more  padded')
     expect(stripHtml('')).toBe('')
     expect(stripHtml('<p></p>')).toBe('')
@@ -135,30 +136,30 @@ describe('format', () => {
 
   it('builds the header with counts and status markers', () => {
     const tasks = [task('1'), task('2', true)]
-    expect(headerLine(state(tasks), 2_000)).toBe('Sun 20 Sep  1 open · 1 done')
-    expect(headerLine(state(tasks, { status: 'refreshing' }), 2_000)).toContain('~')
-    expect(headerLine(state(tasks, { status: 'error' }), 2_000)).toContain('! offline')
-    expect(headerLine(state(tasks, { lastToggleFailedAt: 1_500 }), 2_000)).toContain('! failed')
-    expect(headerLine(state(tasks, { lastToggleFailedAt: 1_500 }), 9_000)).not.toContain('! failed')
+    expect(headerLine(state(tasks), [], 2_000)).toBe('Sun 20 Sep  1 open · 1 done')
+    expect(headerLine(state(tasks, { status: 'refreshing' }), [], 2_000)).toContain('~')
+    expect(headerLine(state(tasks, { status: 'error' }), [], 2_000)).toContain('! offline')
+    expect(headerLine(state(tasks, { lastToggleFailedAt: 1_500 }), [], 2_000)).toContain('! failed')
+    expect(headerLine(state(tasks, { lastToggleFailedAt: 1_500 }), [], 9_000)).not.toContain('! failed')
   })
 })
 
 describe('buildTasksView', () => {
   it('lists open tasks first and can hide completed ones', () => {
     const tasks = [task('a', true), task('b'), task('c', true), task('d')]
-    const all = buildTasksView(state(tasks), true, 0, 2_000)
+    const all = buildTasksView(state(tasks), true, [], 0, 2_000)
     expect(all.rows).toEqual([{ k: 'task', id: 'b' }, { k: 'task', id: 'd' }, { k: 'task', id: 'a' }, { k: 'task', id: 'c' }])
-    expect(buildTasksView(state(tasks), false, 0, 2_000).rows.map(r => (r.k === 'task' ? r.id : r.k))).toEqual(['b', 'd'])
+    expect(buildTasksView(state(tasks), false, [], 0, 2_000).rows.map(r => (r.k === 'task' ? r.id : r.k))).toEqual(['b', 'd'])
   })
 
   it('shows a message instead of an empty list', () => {
-    expect(buildTasksView(state([]), true, 0, 2_000).emptyMessage).toBe('No tasks today')
-    expect(buildTasksView(state([task('a', true)]), false, 0, 2_000).emptyMessage).toContain('All done (1)')
+    expect(buildTasksView(state([]), true, [], 0, 2_000).emptyMessage).toBe('No tasks today')
+    expect(buildTasksView(state([task('a', true)]), false, [], 0, 2_000).emptyMessage).toContain('All done (1)')
   })
 
   it('groups open tasks by priority with header rows when it fits on one page', () => {
     const tasks = [task('a', false, 'A', 'normal'), task('b', false, 'B', 'urgent'), task('c', false, 'C', 'important')]
-    const view = buildTasksView(state(tasks), true, 0, 0)
+    const view = buildTasksView(state(tasks), true, [], 0, 0)
     expect(view.rows).toEqual([
       { k: 'group', priority: 'urgent' },
       { k: 'task', id: 'b' },
@@ -170,33 +171,42 @@ describe('buildTasksView', () => {
     expect(view.itemNames[0]).toBe('— Urgent —')
   })
 
+  it('applies the channel filter before anything else', () => {
+    const tasks = [task('a', false, 'A', null, 'Work'), task('b', true, 'B', null, 'Work'), task('c', false, 'C', null, 'Personal')]
+    const filtered = buildTasksView(state(tasks), true, ['Work'], 0, 0)
+    expect(filtered.rows.map(r => (r.k === 'task' ? r.id : r.k))).toEqual(['a', 'b'])
+    expect(filtered.header).toContain('1 open · 1 done')
+    expect(buildTasksView(state(tasks), true, [], 0, 0).rows).toHaveLength(3)
+    expect(buildTasksView(state(tasks), true, ['Nope'], 0, 0).emptyMessage).toBe('No tasks today')
+  })
+
   it('falls back to a flat list when a single priority is in play', () => {
     const tasks = [task('a', false, 'A', 'normal'), task('b', false, 'B', 'normal')]
-    expect(buildTasksView(state(tasks), true, 0, 0).rows.every(r => r.k === 'task')).toBe(true)
+    expect(buildTasksView(state(tasks), true, [], 0, 0).rows.every(r => r.k === 'task')).toBe(true)
   })
 
   it('drops group headers instead of overflowing the row budget', () => {
     const many = Array.from({ length: MAX_ROWS }, (_, i) => task(String(i), false, `T${i}`, i % 2 === 0 ? 'urgent' : 'low'))
-    const view = buildTasksView(state(many), true, 0, 0)
+    const view = buildTasksView(state(many), true, [], 0, 0)
     expect(view.rows.every(r => r.k === 'task')).toBe(true) // headers would have pushed this over 20
     expect(view.rows).toHaveLength(MAX_ROWS)
   })
 
   it('fits exactly 20 tasks on one page and pages beyond that', () => {
     const many = (n: number) => Array.from({ length: n }, (_, i) => task(String(i)))
-    expect(buildTasksView(state(many(MAX_ROWS)), true, 0, 0).rows).toHaveLength(MAX_ROWS)
+    expect(buildTasksView(state(many(MAX_ROWS)), true, [], 0, 0).rows).toHaveLength(MAX_ROWS)
 
-    const first = buildTasksView(state(many(40)), true, 0, 0)
+    const first = buildTasksView(state(many(40)), true, [], 0, 0)
     expect(first.pageCount).toBe(3)
     expect(first.rows).toHaveLength(PAGE_SIZE + 1)
     expect(first.rows.at(-1)).toEqual({ k: 'next' })
 
-    const middle = buildTasksView(state(many(40)), true, 1, 0)
+    const middle = buildTasksView(state(many(40)), true, [], 1, 0)
     expect(middle.rows[0]).toEqual({ k: 'prev' })
     expect(middle.rows.at(-1)).toEqual({ k: 'next' })
     expect(middle.rows.length).toBeLessThanOrEqual(MAX_ROWS)
 
-    const last = buildTasksView(state(many(40)), true, 9, 0)
+    const last = buildTasksView(state(many(40)), true, [], 9, 0)
     expect(last.page).toBe(2) // clamped
     expect(last.rows.at(-1)).toEqual({ k: 'task', id: '39' })
   })

@@ -86,6 +86,7 @@ export function parseTasksResource(payload: unknown, day: string): Task[] {
         subtasksTotal: subtasks.length,
         priority: parsePriority(t.dailyPriority),
         timeEstimate: typeof t.timeEstimate === 'string' && t.timeEstimate ? t.timeEstimate : undefined,
+        channel: typeof t.channel === 'string' ? t.channel : '',
       }
     })
 }

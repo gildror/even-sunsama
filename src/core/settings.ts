@@ -8,6 +8,9 @@ export const DEFAULT_SETTINGS: Settings = {
   clock24h: false,
   pollSeconds: 120,
   faceClockMode: 'image',
+  channelFilter: [],
+  meetingReminderEnabled: true,
+  meetingReminderLeadMin: 10,
 }
 
 export class SettingsStore {
@@ -43,11 +46,15 @@ export class SettingsStore {
 
 function sanitize(s: Settings): Settings {
   const poll = Number(s.pollSeconds)
+  const lead = Number(s.meetingReminderLeadMin)
   return {
     startScreen: s.startScreen === 'tasks' ? 'tasks' : 'face',
     showCompleted: Boolean(s.showCompleted),
     clock24h: Boolean(s.clock24h),
     pollSeconds: Number.isFinite(poll) ? Math.min(3600, Math.max(30, Math.round(poll))) : DEFAULT_SETTINGS.pollSeconds,
     faceClockMode: s.faceClockMode === 'text' ? 'text' : 'image',
+    channelFilter: Array.isArray(s.channelFilter) ? [...new Set(s.channelFilter.filter((c): c is string => typeof c === 'string' && c !== ''))] : [],
+    meetingReminderEnabled: Boolean(s.meetingReminderEnabled ?? DEFAULT_SETTINGS.meetingReminderEnabled),
+    meetingReminderLeadMin: Number.isFinite(lead) ? Math.min(60, Math.max(1, Math.round(lead))) : DEFAULT_SETTINGS.meetingReminderLeadMin,
   }
 }

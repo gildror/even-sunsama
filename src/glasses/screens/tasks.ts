@@ -1,4 +1,4 @@
-import { doneTasks, hasMixedPriorities, nextTask, orderedTasks } from '../../core/selectors'
+import { doneTasks, filterByChannel, hasMixedPriorities, nextTask, orderedTasks } from '../../core/selectors'
 import type { Priority, StoreState, Task } from '../../core/types'
 import type { GlassesInput } from '../events'
 import { GLYPHS, headerLine, priorityLabel, taskRowLabel } from '../format'
@@ -49,19 +49,20 @@ function buildOpenRows(tasks: Task[], grouped: boolean): { rows: Row[]; itemName
  * more than one is in play and it still fits on one page), completed after,
  * paged beyond 20 rows. Pagination falls back to a flat list — see buildTasksView.
  */
-export function buildTasksView(state: StoreState, showCompleted: boolean, page: number, now: number): TasksView {
-  const header = headerLine(state, now)
-  const openSorted = orderedTasks(state.tasks, false)
-  const done = showCompleted ? doneTasks(state.tasks) : []
+export function buildTasksView(state: StoreState, showCompleted: boolean, channelFilter: string[], page: number, now: number): TasksView {
+  const header = headerLine(state, channelFilter, now)
+  const tasks = filterByChannel(state.tasks, channelFilter)
+  const openSorted = orderedTasks(tasks, false)
+  const done = showCompleted ? doneTasks(tasks) : []
   const doneRows: Row[] = done.map(t => ({ k: 'task', id: t.id }))
   const doneNames = done.map(taskRowLabel)
 
   if (openSorted.length + done.length === 0) {
-    const emptyMessage = state.tasks.length === 0 ? 'No tasks today' : `All done (${state.tasks.length}) ★`
+    const emptyMessage = tasks.length === 0 ? 'No tasks today' : `All done (${tasks.length}) ★`
     return { header, rows: [], itemNames: [], emptyMessage, page: 0, pageCount: 1 }
   }
 
-  if (hasMixedPriorities(state.tasks)) {
+  if (hasMixedPriorities(tasks)) {
     const grouped = buildOpenRows(openSorted, true)
     const rows = [...grouped.rows, ...doneRows]
     const itemNames = [...grouped.itemNames, ...doneNames]
@@ -167,8 +168,10 @@ export class TasksScreen implements Screen {
         this.ctx.settings.update({ showCompleted: !this.ctx.settings.get().showCompleted })
         return
       case MENU.OPEN: {
-        // No prior tap this session: fall back to the top open task instead of doing nothing.
-        const id = this.lastSelectedTaskId ?? nextTask(orderedTasks(this.ctx.store.getState().tasks, false))?.id
+        // No prior tap this session: fall back to the top visible open task instead of doing nothing.
+        const settings = this.ctx.settings.get()
+        const visible = filterByChannel(this.ctx.store.getState().tasks, settings.channelFilter)
+        const id = this.lastSelectedTaskId ?? nextTask(orderedTasks(visible, false))?.id
         if (id) this.ctx.openFocus(id)
         return
       }
@@ -203,7 +206,7 @@ export class TasksScreen implements Screen {
   /** Lists cannot change in place: rebuild when rows change, otherwise only touch the header. */
   private render(): void {
     const settings = this.ctx.settings.get()
-    const view = buildTasksView(this.ctx.store.getState(), settings.showCompleted, this.page, this.ctx.now().getTime())
+    const view = buildTasksView(this.ctx.store.getState(), settings.showCompleted, settings.channelFilter, this.page, this.ctx.now().getTime())
     this.page = view.page
     const menu = buildMenu('tasks', settings)
     const pageKey = JSON.stringify([view.itemNames, view.emptyMessage, menu])

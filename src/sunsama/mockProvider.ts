@@ -4,6 +4,7 @@ interface Fixture {
   title: string
   priority: Priority
   notes: string
+  channel: string
   subtasks: Array<{ title: string; completed: boolean }>
 }
 
@@ -12,6 +13,7 @@ const FIXTURES: Fixture[] = [
     title: 'Review quarterly budget',
     priority: 'urgent',
     notes: 'Pull the Q3 actuals and compare against forecast. Flag anything over 10% variance before the leadership sync.',
+    channel: 'Work',
     subtasks: [
       { title: 'Export actuals from the Finance channel', completed: true },
       { title: 'Compare against forecast', completed: false },
@@ -22,22 +24,24 @@ const FIXTURES: Fixture[] = [
     title: 'Reply to supplier about the delayed shipment and new delivery dates for October',
     priority: 'important',
     notes: '',
+    channel: 'Work',
     subtasks: [],
   },
   {
     title: 'Weekly prep',
     priority: null,
     notes: 'Standing Sunday prep before the week starts.',
+    channel: 'Personal',
     subtasks: [
       { title: 'Inbox zero', completed: false },
       { title: 'Review calendar', completed: false },
       { title: 'Review goals / backlog', completed: false },
     ],
   },
-  { title: 'Book dentist appointment', priority: 'low', notes: '', subtasks: [] },
-  { title: 'Draft panel questions', priority: 'normal', notes: '', subtasks: [] },
-  { title: 'Pick up dry cleaning', priority: 'low', notes: '', subtasks: [] },
-  { title: 'Read architecture proposal', priority: 'normal', notes: '', subtasks: [] },
+  { title: 'Book dentist appointment', priority: 'low', notes: '', channel: 'Personal', subtasks: [] },
+  { title: 'Draft panel questions', priority: 'normal', notes: '', channel: 'Work', subtasks: [] },
+  { title: 'Pick up dry cleaning', priority: 'low', notes: '', channel: 'Personal', subtasks: [] },
+  { title: 'Read architecture proposal', priority: 'normal', notes: '', channel: 'Work', subtasks: [] },
 ]
 
 export interface MockOptions {
@@ -84,7 +88,7 @@ export class MockProvider implements TaskProvider {
     this.meetingInMin = options.meetingInMin
     const varyPriority = options.varyPriority ?? true
     this.tasks = Array.from({ length: count }, (_, i) => {
-      const fixture = i < FIXTURES.length ? FIXTURES[i] : { title: `Task ${i + 1}`, priority: null, notes: '', subtasks: [] }
+      const fixture = i < FIXTURES.length ? FIXTURES[i] : { title: `Task ${i + 1}`, priority: null, notes: '', channel: 'Work', subtasks: [] }
       const priority = varyPriority ? fixture.priority : null
       const subtasks: Subtask[] = fixture.subtasks.map((s, j) => ({ id: `t${i + 1}-s${j + 1}`, title: s.title, completed: s.completed }))
       return {
@@ -97,6 +101,7 @@ export class MockProvider implements TaskProvider {
         subtasksTotal: subtasks.length,
         priority,
         timeEstimate: i === 0 ? '45 minutes' : undefined,
+        channel: fixture.channel,
       }
     })
   }

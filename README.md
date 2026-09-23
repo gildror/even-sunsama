@@ -15,8 +15,12 @@ An [Even Hub](https://hub.evenrealities.com/docs/get-started/overview) plugin th
   item also reaches it, for any
   task, including ones without subtasks that you just want to read the notes on.) Its own menu's
   **Focus** item switches to *Focus mode* — just the clock and task name, for working heads-down —
-  with an upcoming-meeting banner (`◆ Meeting in N minutes`) when one starts within 10 minutes. A
-  single tap peeks at the full view for 10 seconds and returns; a double-tap exits Focus mode for good.
+  with an upcoming-meeting banner (`◆ Meeting in N minutes`) when one starts soon (lead time and
+  on/off are both settings). A single tap peeks at the full view for 10 seconds and returns; a
+  double-tap exits Focus mode for good. "Hide completed" applies to the subtask list here too.
+- **Channel filter**: phone setting listing every channel seen in today's tasks; check specific ones
+  to show only those on the glasses, or leave all unchecked to show everything (the default, and
+  what a brand-new channel falls back to automatically).
 - **Phone page** (inside the Even app): connect to Sunsama, mirror of today's tasks (respects "show
   completed"), settings, log.
 

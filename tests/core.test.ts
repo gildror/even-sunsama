@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { redact } from '../src/core/logger'
-import { hasMixedPriorities, nextMeetingSoon, nextTask, openCount, orderedSubtasks, orderedTasks } from '../src/core/selectors'
+import { availableChannels, filterByChannel, hasMixedPriorities, nextMeetingSoon, nextTask, openCount, orderedSubtasks, orderedTasks } from '../src/core/selectors'
 import { getGlanceSummary } from '../src/core/summary'
 import { SyncController } from '../src/core/sync'
 import { TaskStore } from '../src/core/taskStore'
@@ -8,7 +8,7 @@ import { formatClock, msToNextMinute, parseTimeOfDay12h, todayInTz, zonedTimeToU
 import { AuthRequiredError } from '../src/core/types'
 import type { CalendarEvent, KeyValueStore, Priority, StoreState, Task, TaskProvider } from '../src/core/types'
 
-const task = (id: string, completed = false, priority: Priority = null): Task => ({
+const task = (id: string, completed = false, priority: Priority = null, channel = ''): Task => ({
   id,
   title: `Task ${id}`,
   completed,
@@ -17,6 +17,7 @@ const task = (id: string, completed = false, priority: Priority = null): Task =>
   subtasksDone: 0,
   subtasksTotal: 0,
   priority,
+  channel,
 })
 
 const state = (patch: Partial<StoreState> = {}): StoreState => ({
@@ -120,9 +121,24 @@ describe('selectors and summary', () => {
   it('summarises for glance surfaces using priority-ordered "next"', () => {
     const tasks = [task('a', true), task('b', false, 'normal'), task('c', false, 'urgent')]
     const base = state({ day: 'd', tz: 'UTC', tasks, auth: 'signedIn' })
-    expect(getGlanceSummary({ ...base, lastSyncAt: 1_000 }, 2_000)).toMatchObject({ openCount: 2, doneCount: 1, nextTitle: 'Task c', stale: false })
-    expect(getGlanceSummary({ ...base, lastSyncAt: 1_000 }, 1_000 + 11 * 60_000).stale).toBe(true)
-    expect(getGlanceSummary({ ...base, status: 'error' }, 0).stale).toBe(true)
+    expect(getGlanceSummary({ ...base, lastSyncAt: 1_000 }, [], 2_000)).toMatchObject({ openCount: 2, doneCount: 1, nextTitle: 'Task c', stale: false })
+    expect(getGlanceSummary({ ...base, lastSyncAt: 1_000 }, [], 1_000 + 11 * 60_000).stale).toBe(true)
+    expect(getGlanceSummary({ ...base, status: 'error' }, [], 0).stale).toBe(true)
+  })
+
+  it('summary respects the channel filter', () => {
+    const tasks = [task('a', false, null, 'Work'), task('b', false, null, 'Personal')]
+    const base = state({ day: 'd', tz: 'UTC', tasks, auth: 'signedIn' })
+    expect(getGlanceSummary(base, ['Work'], 0).openCount).toBe(1)
+    expect(getGlanceSummary(base, [], 0).openCount).toBe(2)
+  })
+
+  it('filterByChannel and availableChannels', () => {
+    const tasks = [task('a', false, null, 'Work'), task('b', false, null, 'Personal'), task('c', false, null, 'Work'), task('d')]
+    expect(filterByChannel(tasks, []).map(t => t.id)).toEqual(['a', 'b', 'c', 'd'])
+    expect(filterByChannel(tasks, ['Work']).map(t => t.id)).toEqual(['a', 'c'])
+    expect(filterByChannel(tasks, ['Personal', 'Work']).map(t => t.id)).toEqual(['a', 'b', 'c'])
+    expect(availableChannels(tasks)).toEqual(['Work', 'Personal'])
   })
 
   it('finds the soonest meeting starting within the threshold, in the account timezone', () => {

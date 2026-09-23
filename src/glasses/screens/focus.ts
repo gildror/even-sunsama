@@ -206,22 +206,27 @@ export class FocusScreen implements Screen {
     if (!task) return { texts: [{ ...EVT, content: 'Task no longer available.\nDouble-tap to go back.', capture: true }], menu }
 
     const hasSubtasks = task.subtasks.length > 0
-    const notesBudget = hasSubtasks ? NOTES_CHARS_WITH_SUBTASKS : NOTES_CHARS_ALONE
-    const notesBox = hasSubtasks ? NOTES : NOTES_ALONE
-    const notesText = truncateUtf8(stripHtml(task.notes) || ' ', notesBudget)
+    const showCompleted = this.ctx.settings.get().showCompleted
+    // "Hide completed" applies here too: a completed subtask disappears from the list, same as a
+    // completed task disappears from Tasks.
+    const visible = orderedSubtasks(showCompleted ? task.subtasks : task.subtasks.filter(s => !s.completed)).slice(0, MAX_SUBTASK_ROWS)
     const header = { ...HDR, content: headerText(task) }
-    const notes = { ...notesBox, content: notesText }
 
-    if (!hasSubtasks) {
+    if (visible.length === 0) {
       this.subtaskIds = []
-      return { texts: [{ ...EVT, content: ' ', capture: true, padding: 0 }, header, notes], menu }
+      // ★ not ✓: the glasses font only documents a specific glyph set, and a checkmark isn't in
+      // it — confirmed in the simulator, it silently renders as blank space. ★ is the same glyph
+      // the empty Tasks list already uses for "all done", so this stays consistent too.
+      const status = hasSubtasks ? `★ All ${task.subtasksTotal} subtasks done` : ''
+      const notesText = truncateUtf8([stripHtml(task.notes), status].filter(Boolean).join('\n\n') || ' ', NOTES_CHARS_ALONE)
+      return { texts: [{ ...EVT, content: ' ', capture: true, padding: 0 }, header, { ...NOTES_ALONE, content: notesText }], menu }
     }
 
-    const subtasks = orderedSubtasks(task.subtasks).slice(0, MAX_SUBTASK_ROWS)
-    this.subtaskIds = subtasks.map(s => s.id)
+    const notes = { ...NOTES, content: truncateUtf8(stripHtml(task.notes) || ' ', NOTES_CHARS_WITH_SUBTASKS) }
+    this.subtaskIds = visible.map(s => s.id)
     return {
       texts: [header, notes],
-      lists: [{ ...LIST, items: subtasks.map(subtaskRowLabel), capture: !readOnly }],
+      lists: [{ ...LIST, items: visible.map(subtaskRowLabel), capture: !readOnly }],
       // readOnly (peek) still needs exactly one capturing container: the invisible full-bleed layer.
       ...(readOnly ? { texts: [{ ...EVT, content: ' ', capture: true, padding: 0 }, header, notes] } : {}),
       menu,
@@ -236,9 +241,12 @@ export class FocusScreen implements Screen {
       return
     }
     const state = this.ctx.store.getState()
-    const meeting = nextMeetingSoon(state.events, state.day, state.tz, this.ctx.now())
+    const appSettings = this.ctx.settings.get()
+    const meeting = appSettings.meetingReminderEnabled
+      ? nextMeetingSoon(state.events, state.day, state.tz, this.ctx.now(), appSettings.meetingReminderLeadMin)
+      : null
     const banner = meeting ? formatMeetingBanner(meeting) : ''
-    const clock = formatClock(this.ctx.now(), this.ctx.settings.get().clock24h)
+    const clock = formatClock(this.ctx.now(), appSettings.clock24h)
     const title = truncateUtf8(`${priorityPrefix(task.priority)}${cleanTitle(task.title)}`, 90)
     const key = JSON.stringify([banner, clock, title])
     if (key === this.lastMinimalKey) return

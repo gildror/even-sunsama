@@ -7,9 +7,15 @@ export interface StorageBridge {
 }
 
 /**
- * Bridge storage first (survives WebView kills and app updates), mirrored to
- * window.localStorage so a plain browser or a non-persisting host still works.
- * Both are written on every set, so whichever answers holds the latest value.
+ * window.localStorage first, bridge storage as a fallback/second copy. Both are
+ * written on every set, but callers routinely fire `set()` without awaiting it
+ * (e.g. a settings toggle right before the user exits the app) — the bridge
+ * write is an async round trip that a fast app close can cut off before it
+ * lands, while the localStorage write is synchronous and has always completed
+ * by the time `set()` is even called, let alone awaited. Reading localStorage
+ * first means a truncated bridge write can never shadow the value that did
+ * make it to disk; the bridge copy only matters when localStorage itself is
+ * empty or unavailable (blocked/private-mode storage).
  */
 export class BridgeStorage implements KeyValueStore {
   private cache = new Map<string, string>()
@@ -21,13 +27,13 @@ export class BridgeStorage implements KeyValueStore {
     if (cached !== undefined) return cached || null
     let value = ''
     try {
-      value = (await this.bridge?.getLocalStorage(key)) ?? ''
+      value = window.localStorage.getItem(key) ?? ''
     } catch {
       value = ''
     }
     if (!value) {
       try {
-        value = window.localStorage.getItem(key) ?? ''
+        value = (await this.bridge?.getLocalStorage(key)) ?? ''
       } catch {
         value = ''
       }

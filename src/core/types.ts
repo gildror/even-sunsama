@@ -19,6 +19,8 @@ export interface Task {
   priority: Priority
   /** Human string as Sunsama renders it, e.g. "1 hours and 30 minutes"; undefined if unset. */
   timeEstimate?: string
+  /** Sunsama channel name, e.g. "Work"; '' if the task has none. */
+  channel: string
 }
 
 export interface CalendarEvent {
@@ -80,6 +82,11 @@ export interface Settings {
   clock24h: boolean
   pollSeconds: number
   faceClockMode: 'image' | 'text'
+  /** Empty = every channel. Non-empty = only tasks whose channel is in this list. */
+  channelFilter: string[]
+  meetingReminderEnabled: boolean
+  /** Minutes before a meeting starts that the reminder banner appears. */
+  meetingReminderLeadMin: number
 }
 
 export class AuthRequiredError extends Error {

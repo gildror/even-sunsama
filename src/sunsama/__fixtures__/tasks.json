@@ -11,7 +11,7 @@
       "timeEstimate": "1 hours",
       "sortOrder": 1024,
       "subtasks": [],
-      "channel": "work",
+      "channel": "Focus work",
       "dailyPriority": "urgent",
       "notes": "<p><strong>Focus</strong> on the Q3 numbers.</p><ul><li>Check variance</li></ul>"
     },
@@ -39,7 +39,8 @@
           "title": "Review goals",
           "completed": false
         }
-      ]
+      ],
+      "channel": "Personal"
     },
     {
       "_id": "t-done",

@@ -19,7 +19,7 @@ export interface FaceView {
 
 /** Pure view-model for the glance face: open count on the left, clock on the right. */
 export function buildFaceView(state: StoreState, settings: Settings, now: Date): FaceView {
-  const summary = getGlanceSummary(state, now.getTime())
+  const summary = getGlanceSummary(state, settings.channelFilter, now.getTime())
   const allDone = summary.openCount === 0 && summary.doneCount > 0
   return {
     count: String(summary.openCount),

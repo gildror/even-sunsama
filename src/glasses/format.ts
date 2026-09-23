@@ -1,5 +1,5 @@
 import { formatDayShort } from '../core/time'
-import { doneTasks, openCount } from '../core/selectors'
+import { doneTasks, filterByChannel, openCount } from '../core/selectors'
 import type { UpcomingMeeting } from '../core/selectors'
 import { STALE_AFTER_MS } from '../core/summary'
 import type { Priority, StoreState, Subtask, Task } from '../core/types'
@@ -87,7 +87,7 @@ export function stripHtml(html: string): string {
   const withBreaks = html
     .replace(/<\/(p|li|div|h[1-6])>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<li[^>]*>/gi, '- ') // plain ASCII: '•' isn't in the glasses font's documented glyph set
   const withoutTags = withBreaks.replace(/<[^>]+>/g, '')
   const decoded = withoutTags
     .replace(/&nbsp;/g, ' ')
@@ -114,8 +114,9 @@ export function statusMarker(state: StoreState, now: number): string {
 }
 
 /** `Sun 20 Sep  3 open · 4 done  ~` */
-export function headerLine(state: StoreState, now: number): string {
-  const counts = `${openCount(state.tasks)} open · ${doneTasks(state.tasks).length} done`
+export function headerLine(state: StoreState, channelFilter: string[], now: number): string {
+  const tasks = filterByChannel(state.tasks, channelFilter)
+  const counts = `${openCount(tasks)} open · ${doneTasks(tasks).length} done`
   return [state.day ? formatDayShort(state.day) : '', counts, statusMarker(state, now)].filter(Boolean).join('  ')
 }
 

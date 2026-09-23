@@ -1,4 +1,4 @@
-import { orderedTasks } from '../core/selectors'
+import { availableChannels, filterByChannel, orderedTasks } from '../core/selectors'
 import type { Logger } from '../core/logger'
 import type { SettingsStore } from '../core/settings'
 import type { SyncController } from '../core/sync'
@@ -44,6 +44,16 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
       <ul id="tasks"></ul>
     </section>
     <section>
+      <h2>Channels</h2>
+      <p class="hint">Choose which channels show up on the glasses. Nothing checked off here means every channel.</p>
+      <div id="channels"></div>
+    </section>
+    <section>
+      <h2>Meeting reminder</h2>
+      <label class="check"><input id="meetingReminderEnabled" type="checkbox" /> Show a banner before meetings</label>
+      <label>Minutes before the meeting <input id="meetingReminderLeadMin" type="number" min="1" max="60" step="1" /></label>
+    </section>
+    <section>
       <h2>Settings</h2>
       <label>Start screen
         <select id="startScreen"><option value="face">Face</option><option value="tasks">Tasks</option></select>
@@ -64,6 +74,7 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
   const $ = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}`) as T
   const statusEl = $('status')
   const tasksEl = $<HTMLUListElement>('tasks')
+  const channelsEl = $('channels')
   const logEl = $('log')
   const connectMsg = $('connectMsg')
   const bundleEl = $<HTMLTextAreaElement>('bundle')
@@ -83,8 +94,9 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
 
   function renderTasks(): void {
     const s = store.getState()
+    const visible = filterByChannel(s.tasks, settings.get().channelFilter)
     tasksEl.replaceChildren(
-      ...orderedTasks(s.tasks, settings.get().showCompleted).map(task => {
+      ...orderedTasks(visible, settings.get().showCompleted).map(task => {
         const li = document.createElement('li')
         const label = document.createElement('label')
         const box = document.createElement('input')
@@ -100,7 +112,35 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
         return li
       }),
     )
-    if (!s.tasks.length) tasksEl.innerHTML = '<li class="hint">No tasks loaded</li>'
+    if (!visible.length) tasksEl.innerHTML = `<li class="hint">${s.tasks.length ? 'No tasks in the selected channels' : 'No tasks loaded'}</li>`
+  }
+
+  function renderChannels(): void {
+    const channels = availableChannels(store.getState().tasks)
+    const filter = settings.get().channelFilter
+    channelsEl.replaceChildren(
+      ...(channels.length ? channels : ['(none yet — refresh once tasks load)']).map(channel => {
+        const label = document.createElement('label')
+        label.className = 'check'
+        if (!channels.length) {
+          label.className = 'hint'
+          label.textContent = channel
+          return label
+        }
+        const box = document.createElement('input')
+        box.type = 'checkbox'
+        box.checked = filter.length === 0 || filter.includes(channel)
+        box.addEventListener('change', () => {
+          const current = filter.length === 0 ? channels : filter
+          const next = box.checked ? [...new Set([...current, channel])] : current.filter(c => c !== channel)
+          // Every available channel checked is the same as no filter at all — and keeps a channel
+          // that shows up tomorrow visible by default, instead of silently hiding it.
+          settings.update({ channelFilter: next.length >= channels.length ? [] : next })
+        })
+        label.append(box, document.createTextNode(channel))
+        return label
+      }),
+    )
   }
 
   function renderSettings(): void {
@@ -110,6 +150,8 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
     $<HTMLInputElement>('pollSeconds').value = String(v.pollSeconds)
     $<HTMLInputElement>('showCompleted').checked = v.showCompleted
     $<HTMLInputElement>('clock24h').checked = v.clock24h
+    $<HTMLInputElement>('meetingReminderEnabled').checked = v.meetingReminderEnabled
+    $<HTMLInputElement>('meetingReminderLeadMin').value = String(v.meetingReminderLeadMin)
   }
 
   function bind<K extends keyof Settings>(id: string, key: K, read: (el: any) => Settings[K]): void {
@@ -120,6 +162,8 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
   bind('pollSeconds', 'pollSeconds', el => Number(el.value))
   bind('showCompleted', 'showCompleted', el => el.checked)
   bind('clock24h', 'clock24h', el => el.checked)
+  bind('meetingReminderEnabled', 'meetingReminderEnabled', el => el.checked)
+  bind('meetingReminderLeadMin', 'meetingReminderLeadMin', el => Number(el.value))
 
   $('refresh').addEventListener('click', () => void sync.refreshNow())
 
@@ -143,16 +187,19 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
   store.subscribe(() => {
     renderStatus()
     renderTasks()
+    renderChannels() // new channels can appear as tasks load
   })
   settings.subscribe(() => {
     renderSettings()
-    renderTasks() // "Show completed tasks" changes which rows this list should have
+    renderTasks() // "Show completed" and the channel filter change which rows this list has
+    renderChannels()
   })
   logger.subscribe(() => {
     logEl.textContent = logger.getLines().join('\n')
   })
   renderStatus()
   renderTasks()
+  renderChannels()
   renderSettings()
   logEl.textContent = logger.getLines().join('\n')
 

@@ -6,6 +6,22 @@ export const doneTasks = (tasks: Task[]): Task[] => tasks.filter(t => t.complete
 export const openCount = (tasks: Task[]): number => openTasks(tasks).length
 export const nextTask = (tasks: Task[]): Task | undefined => tasks.find(t => !t.completed)
 
+/**
+ * The channel filter, applied ahead of everything else (open/done, priority,
+ * grouping): every screen that reads `state.tasks` for display should run it
+ * through this first. Empty filter = no restriction.
+ */
+export function filterByChannel(tasks: Task[], channelFilter: string[]): Task[] {
+  return channelFilter.length === 0 ? tasks : tasks.filter(t => channelFilter.includes(t.channel))
+}
+
+/** Distinct channel names present today, in first-seen order — what the phone settings list offers. */
+export function availableChannels(tasks: Task[]): string[] {
+  const seen = new Set<string>()
+  for (const t of tasks) if (t.channel) seen.add(t.channel)
+  return [...seen]
+}
+
 /** Highest first. Absent priority sorts with "normal" — present but unremarkable. */
 export const PRIORITY_RANK: Record<Exclude<Priority, null>, number> = { urgent: 0, important: 1, normal: 2, low: 3 }
 export const priorityRank = (p: Priority): number => PRIORITY_RANK[p ?? 'normal']
