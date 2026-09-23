@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { redact } from '../src/core/logger'
-import { hasMixedPriorities, nextMeetingSoon, nextTask, openCount, orderedTasks } from '../src/core/selectors'
+import { hasMixedPriorities, nextMeetingSoon, nextTask, openCount, orderedSubtasks, orderedTasks } from '../src/core/selectors'
 import { getGlanceSummary } from '../src/core/summary'
 import { SyncController } from '../src/core/sync'
 import { TaskStore } from '../src/core/taskStore'
@@ -105,6 +105,16 @@ describe('selectors and summary', () => {
     expect(hasMixedPriorities(tasks)).toBe(true)
     expect(hasMixedPriorities([task('a', false, 'normal'), task('b')])).toBe(false)
     expect(hasMixedPriorities([task('a', true, 'urgent'), task('b', false, 'normal')])).toBe(false) // completed tasks don't count
+  })
+
+  it('sinks completed subtasks to the bottom, keeping order within each group', () => {
+    const subtasks = [
+      { id: 's1', title: 'One', completed: true },
+      { id: 's2', title: 'Two', completed: false },
+      { id: 's3', title: 'Three', completed: false },
+      { id: 's4', title: 'Four', completed: true },
+    ]
+    expect(orderedSubtasks(subtasks).map(s => s.id)).toEqual(['s2', 's3', 's1', 's4'])
   })
 
   it('summarises for glance surfaces using priority-ordered "next"', () => {
@@ -264,6 +274,74 @@ describe('TaskStore', () => {
       await store.refresh()
       expect(await store.toggleSubtask('a', 'nope')).toBe(false)
       expect(await store.toggleSubtask('missing-task', 's1')).toBe(false)
+    })
+
+    describe('completion sync', () => {
+      // Two subtasks, one already done: a task with subtasks can only complete via its subtasks.
+      const partial = {
+        ...task('a'),
+        subtasks: [
+          { id: 's1', title: 'One', completed: true },
+          { id: 's2', title: 'Two', completed: false },
+        ],
+        subtasksDone: 1,
+        subtasksTotal: 2,
+      }
+
+      it('auto-completes the task once its last subtask is checked off', async () => {
+        const provider = fakeProvider([partial])
+        const store = new TaskStore({ provider, kv: new MemoryKv(), now })
+        await store.refresh()
+        expect(await store.toggleSubtask('a', 's2')).toBe(true)
+        expect(provider.setCompleted).toHaveBeenCalledWith('a', true, '2026-09-20')
+        expect(store.getState().tasks[0].completed).toBe(true)
+        expect(store.getState().pending).toEqual({})
+      })
+
+      it('auto-uncompletes an already-complete task when a subtask is unchecked', async () => {
+        const done = { ...partial, completed: true, subtasks: partial.subtasks.map(s => ({ ...s, completed: true })), subtasksDone: 2 }
+        const provider = fakeProvider([done])
+        const store = new TaskStore({ provider, kv: new MemoryKv(), now })
+        await store.refresh()
+        expect(await store.toggleSubtask('a', 's1')).toBe(true)
+        expect(provider.setCompleted).toHaveBeenCalledWith('a', false, '2026-09-20')
+        expect(store.getState().tasks[0].completed).toBe(false)
+      })
+
+      it('leaves task completion alone when some subtasks are still open', async () => {
+        const provider = fakeProvider([partial])
+        const store = new TaskStore({ provider, kv: new MemoryKv(), now })
+        await store.refresh()
+        expect(await store.toggleSubtask('a', 's1')).toBe(true) // un-checks the one that was done; still not "all done"
+        expect(provider.setCompleted).not.toHaveBeenCalled()
+        expect(store.getState().tasks[0].completed).toBe(false)
+      })
+
+      it('rolls back just the completion sync if it fails, keeping the subtask toggle that already succeeded', async () => {
+        const provider = fakeProvider([partial])
+        provider.setCompleted.mockRejectedValue(new Error('offline'))
+        const store = new TaskStore({ provider, kv: new MemoryKv(), now })
+        await store.refresh()
+        expect(await store.toggleSubtask('a', 's2')).toBe(true) // the subtask call itself succeeded
+        const finalTask = store.getState().tasks[0]
+        expect(finalTask.subtasks.find(s => s.id === 's2')?.completed).toBe(true)
+        expect(finalTask.completed).toBe(false) // rolled back
+        expect(store.getState().lastToggleFailedAt).toBeDefined()
+      })
+
+      it('does not fire a second completion call while one is already in flight for the task', async () => {
+        const provider = fakeProvider([partial])
+        let finishComplete!: () => void
+        provider.setCompleted.mockImplementation(() => new Promise<void>(resolve => (finishComplete = resolve)))
+        const store = new TaskStore({ provider, kv: new MemoryKv(), now })
+        await store.refresh()
+
+        const completing = store.toggle('a') // unrelated manual completion toggle, still in flight
+        await store.toggleSubtask('a', 's2') // would otherwise also want to complete the task
+        expect(provider.setCompleted).toHaveBeenCalledTimes(1)
+        finishComplete()
+        await completing
+      })
     })
   })
 })

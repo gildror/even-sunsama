@@ -14,7 +14,7 @@ See today's Sunsama task list on your Even G2 and tick tasks off with a tap, pho
 
 - Glance screen: how many tasks are still open, the time, and the next task up.
 - Task list: today's tasks with open ones first, grouped by priority, and subtask progress. Tap a task to complete it; tap again to reopen it. Changes sync to Sunsama right away.
-- Task View: open a task's full description and subtasks, and check subtasks off individually.
+- Task View: tapping a task with subtasks opens its full description and checkable subtasks instead of completing it — the task finishes on its own once every subtask is checked off.
 - Focus mode: a distraction-free view showing just the clock and task name, with a heads-up banner when a meeting is starting soon. Tap to peek at the full view, double-tap to come back.
 - Contextual menu on every screen: switch screens, refresh, hide completed tasks, open a task.
 - Works offline from the last sync and never shows a blank screen.

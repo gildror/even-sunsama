@@ -1,5 +1,5 @@
 import { parseTimeOfDay12h, zonedTimeToUtc } from './time'
-import type { CalendarEvent, Priority, Task } from './types'
+import type { CalendarEvent, Priority, Subtask, Task } from './types'
 
 export const openTasks = (tasks: Task[]): Task[] => tasks.filter(t => !t.completed)
 export const doneTasks = (tasks: Task[]): Task[] => tasks.filter(t => t.completed)
@@ -18,6 +18,15 @@ export const priorityRank = (p: Priority): number => PRIORITY_RANK[p ?? 'normal'
 export function orderedTasks(tasks: Task[], showCompleted: boolean): Task[] {
   const open = [...openTasks(tasks)].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority))
   return showCompleted ? [...open, ...doneTasks(tasks)] : open
+}
+
+/**
+ * Open subtasks first, done ones after — same "sink to the bottom" rule as
+ * `orderedTasks`. A list rebuild resets the OS cursor to row 0, so without this,
+ * checking off several subtasks in a row keeps landing back on one you just did.
+ */
+export function orderedSubtasks(subtasks: Subtask[]): Subtask[] {
+  return [...subtasks].sort((a, b) => Number(a.completed) - Number(b.completed))
 }
 
 /** Whether `tasks` has more than one distinct priority among its open items — grouping is only useful then. */

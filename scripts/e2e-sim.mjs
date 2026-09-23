@@ -146,16 +146,19 @@ async function run() {
 
   await input('click')
   await expectLog('[app] screen=tasks rows=5')
+  // Row 0 is t1, which has subtasks (tapping it would open Task View, not toggle it — see the
+  // third scenario below) — t2 has none, so it's the one to exercise a plain toggle here.
+  await input('down')
   await input('click')
-  await expectLog('[store] toggle t1 -> true ok')
+  await expectLog('[store] toggle t2 -> true ok')
   await sleep(800)
   await screenshot('tasks-after-check')
 
-  // t1 sank into the completed group (rows: t2, t3, t1, t4, t5); move to it and un-check.
+  // t2 sank into the completed group (rows: t1, t3, t2, t4, t5); move to it and un-check.
   await input('down')
   await input('down')
   await input('click')
-  await expectLog('[store] toggle t1 -> false ok')
+  await expectLog('[store] toggle t2 -> false ok')
 
   await input('double_click')
   await expectLog('[app] screen=face open=3')
@@ -173,8 +176,9 @@ async function run() {
   await expectLog('[app] screen=face open=3', 30_000)
   await input('click')
   await expectLog('[app] screen=tasks rows=5')
+  await input('down') // t1 has subtasks; t2 doesn't, so it's the one that attempts (and fails) a toggle
   await input('click')
-  await expectLog('[store] toggle t1 -> true failed, rolled back')
+  await expectLog('[store] toggle t2 -> true failed, rolled back')
   await sleep(800)
   await screenshot('tasks-after-rollback')
   stop(sim)
@@ -194,20 +198,37 @@ async function run() {
   const groupHeader = litPixels(grouped, { x: 0, y: 36, w: 200, h: 34 })
   check('tasks: priority group header rendered', groupHeader > 200, `${groupHeader} lit px`)
 
-  // Row 0 is the "— Urgent —" header; row 1 is t1 (urgent, has subtasks). Select it, then open Task View.
+  // Row 0 is the "— Urgent —" header; row 1 is t1 (urgent, has subtasks). A task with subtasks
+  // can only complete by finishing them, so tapping it opens Task View directly — no toggle.
   await input('down')
   await input('click')
+  await expectLog('[app] screen=focus task=t1')
+  await screenshot('focus-full')
+
+  await input('click') // first OPEN subtask (t1-s1 starts done, so this lands on t1-s2)
+  await expectLog('[store] toggle subtask t1-s2 -> true ok')
+  await input('click') // t1-s3, the last remaining open one -> the task auto-completes
+  await expectLog('[store] toggle subtask t1-s3 -> true ok')
   await expectLog('[store] toggle t1 -> true ok')
+  await screenshot('focus-autocompleted')
+
+  await input('double_click') // full -> tasks; t1 is now done, t2 (no subtasks) took its place at row 1
+  await expectLog('[app] screen=tasks')
+
+  // t2 has no subtasks, so a plain tap still completes it directly — the old behaviour, unchanged.
+  // This also sets it as the Tasks menu's "Open" target for the next part.
+  await input('down')
+  await input('click')
+  await expectLog('[store] toggle t2 -> true ok')
+
+  // The "Open" menu item remains the way to view a task's description when it has no subtasks
+  // to tap into directly.
   await input('context_menu')
   await input('down')
   await input('down')
   await input('down')
   await input('click') // Tasks menu: Face, Refresh, Hide completed, Open
-  await expectLog('[app] screen=focus task=t1')
-  await screenshot('focus-full')
-
-  await input('click') // first subtask row
-  await expectLog('[store] toggle subtask t1-s1 -> false ok') // t1's first subtask starts completed
+  await expectLog('[app] screen=focus task=t2')
 
   await input('context_menu')
   await input('click') // Task View full-mode menu: Focus is first

@@ -188,7 +188,11 @@ export class TasksScreen implements Screen {
     }
     if (row.k === 'task') {
       this.lastSelectedTaskId = row.id
-      void this.ctx.store.toggle(row.id)
+      const task = this.ctx.store.getState().tasks.find(t => t.id === row.id)
+      // A task with subtasks can only be completed by finishing all of them — open Task View
+      // for that instead of toggling here. A task with none still completes with one tap.
+      if (task && task.subtasksTotal > 0) this.ctx.openFocus(row.id)
+      else void this.ctx.store.toggle(row.id)
     } else if (row.k === 'prev' || row.k === 'next') {
       this.page = view.page + (row.k === 'next' ? 1 : -1)
       this.render()

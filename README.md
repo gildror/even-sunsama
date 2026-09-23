@@ -8,11 +8,15 @@ An [Even Hub](https://hub.evenrealities.com/docs/get-started/overview) plugin th
 - **Tasks screen**: today's tasks, open ones first, grouped by Sunsama's daily priority (urgent →
   important → normal → low) when more than one is in play and it still fits on one page. Tap to
   check off or un-check.
-- **Task View / Focus screen**: opened via the Tasks menu's **Open** item, for the task you last
-  tapped. *Full mode* shows the description and checkable subtasks. Its own menu's **Focus** item
-  switches to *Focus mode* — just the clock and task name, for working heads-down — with an upcoming-
-  meeting banner (`◆ Meeting in N minutes`) when one starts within 10 minutes. A single tap peeks at
-  the full view for 10 seconds and returns; a double-tap exits Focus mode for good.
+- **Task View / Focus screen**: tapping a task with subtasks in Tasks opens it directly — a task with
+  subtasks can only be completed by finishing all of them, so *Full mode* shows the description and
+  checkable subtasks instead of toggling it — the task itself completes automatically once every
+  subtask is checked off, and un-completes if you uncheck one afterwards. (The Tasks menu's **Open**
+  item also reaches it, for any
+  task, including ones without subtasks that you just want to read the notes on.) Its own menu's
+  **Focus** item switches to *Focus mode* — just the clock and task name, for working heads-down —
+  with an upcoming-meeting banner (`◆ Meeting in N minutes`) when one starts within 10 minutes. A
+  single tap peeks at the full view for 10 seconds and returns; a double-tap exits Focus mode for good.
 - **Phone page** (inside the Even app): connect to Sunsama, mirror of today's tasks (respects "show
   completed"), settings, log.
 
@@ -25,7 +29,7 @@ shows while the plugin is open. `src/core/summary.ts` is the piece a real widget
 | Screen | Tap | Double-tap | Tap, then long-press |
 |---|---|---|---|
 | Face | Open tasks | Exit dialog | Menu: Tasks · Refresh · Hide/Show completed |
-| Tasks | Check off / un-check the selected task | Back to face | Menu: Face · Refresh · Hide/Show completed · **Open** |
+| Tasks | Task with no subtasks: check off / un-check. Task with subtasks: opens Task View | Back to face | Menu: Face · Refresh · Hide/Show completed · **Open** |
 | Task View — full mode | Check off / un-check a subtask | Back to tasks | Menu: **Focus** · Tasks · Refresh |
 | Task View — Focus mode | Peek at full view for 10 s | Exit Focus mode (back to full) | Menu: Full view · Tasks |
 

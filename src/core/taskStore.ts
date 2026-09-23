@@ -123,7 +123,11 @@ export class TaskStore {
   async toggle(id: string): Promise<boolean> {
     const task = this.state.tasks.find(t => t.id === id)
     if (!task || id in this.state.pending) return false
-    const target = !task.completed
+    return this.applyCompleted(id, !task.completed)
+  }
+
+  /** The shared optimistic apply/rollback for a task's completion, however it was decided. */
+  private async applyCompleted(id: string, target: boolean): Promise<boolean> {
     const day = this.state.day || todayInTz(this.state.tz, this.now())
     this.patch({ tasks: this.withCompleted(id, target), pending: { ...this.state.pending, [id]: target } })
     try {
@@ -144,7 +148,12 @@ export class TaskStore {
     }
   }
 
-  /** Same optimistic pattern as `toggle`, for one subtask of a task. */
+  /**
+   * Same optimistic pattern as `toggle`, for one subtask of a task. On
+   * success, also keeps the parent task's completion in sync with "are all
+   * its subtasks done?" — Task View has no other way to complete a task
+   * that has subtasks (see TasksScreen for the matching rule on the list).
+   */
   async toggleSubtask(taskId: string, subtaskId: string): Promise<boolean> {
     const task = this.state.tasks.find(t => t.id === taskId)
     const subtask = task?.subtasks.find(s => s.id === subtaskId)
@@ -159,6 +168,7 @@ export class TaskStore {
       this.patch({ pendingSubtasks: withoutKey(this.state.pendingSubtasks, subtaskId) })
       this.persist()
       this.log(`toggle subtask ${subtaskId} -> ${target} ok`)
+      void this.syncCompletionFromSubtasks(taskId)
       return true
     } catch (err) {
       this.patch({
@@ -170,6 +180,15 @@ export class TaskStore {
       this.log(`toggle subtask ${subtaskId} -> ${target} failed, rolled back`)
       return false
     }
+  }
+
+  /** "All subtasks done" <=> completed, applied only when it's out of sync and nothing else is mid-flight for this task. */
+  private async syncCompletionFromSubtasks(taskId: string): Promise<void> {
+    const task = this.state.tasks.find(t => t.id === taskId)
+    if (!task || task.subtasksTotal === 0 || taskId in this.state.pending) return
+    const shouldBeComplete = task.subtasksDone === task.subtasksTotal
+    if (task.completed === shouldBeComplete) return
+    await this.applyCompleted(taskId, shouldBeComplete)
   }
 
   private fail(err: unknown): void {

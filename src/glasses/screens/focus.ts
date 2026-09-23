@@ -1,4 +1,4 @@
-import { nextMeetingSoon } from '../../core/selectors'
+import { nextMeetingSoon, orderedSubtasks } from '../../core/selectors'
 import { formatClock } from '../../core/time'
 import type { Subtask, Task } from '../../core/types'
 import type { GlassesInput } from '../events'
@@ -217,7 +217,7 @@ export class FocusScreen implements Screen {
       return { texts: [{ ...EVT, content: ' ', capture: true, padding: 0 }, header, notes], menu }
     }
 
-    const subtasks = task.subtasks.slice(0, MAX_SUBTASK_ROWS)
+    const subtasks = orderedSubtasks(task.subtasks).slice(0, MAX_SUBTASK_ROWS)
     this.subtaskIds = subtasks.map(s => s.id)
     return {
       texts: [header, notes],
