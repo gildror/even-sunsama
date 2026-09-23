@@ -8,7 +8,8 @@ import { SCREEN_H, SCREEN_W } from '../page'
 import type { PageSpec } from '../page'
 import type { Screen, ScreenContext } from './types'
 
-const PEEK_MS = 10_000
+/** No tap for this long in Focus mode blanks the display; any tap wakes it. */
+const IDLE_MS = 10_000
 /** Room left for notes after the header, before a subtask list (or more notes) takes the rest. */
 const NOTES_CHARS_WITH_SUBTASKS = 160
 const NOTES_CHARS_ALONE = 420
@@ -20,10 +21,12 @@ const NOTES = { id: 3, name: 'notes', x: 8, y: 62, w: 560, h: 70 }
 const NOTES_ALONE = { id: 3, name: 'notes', x: 8, y: 62, w: 560, h: 210 }
 const LIST = { id: 4, name: 'subtasks', x: 0, y: 134, w: SCREEN_W, h: 152 }
 
-// Numbered from 2 so these never collide with EVT (id 1) on the same page.
-const MIN_BANNER = { id: 2, name: 'banner', x: 8, y: 8, w: 560, h: 32 }
-const MIN_CLOCK = { id: 3, name: 'clock', x: 8, y: 48, w: 200, h: 48 }
-const MIN_TITLE = { id: 4, name: 'title', x: 8, y: 100, w: 560, h: 48 }
+// Focus mode's own containers — a separate page, so ids/names only need to be unique within it.
+const F_EVT = { id: 1, name: 'evt', x: 0, y: 0, w: SCREEN_W, h: SCREEN_H }
+const F_BANNER = { id: 2, name: 'banner', x: 8, y: 4, w: 560, h: 28 }
+const F_TITLE = { id: 3, name: 'title', x: 8, y: 36, w: 420, h: 32 }
+const F_CLOCK = { id: 4, name: 'clock', x: 436, y: 36, w: 132, h: 32 }
+const F_LIST = { id: 5, name: 'fsubtasks', x: 0, y: 74, w: SCREEN_W, h: 206 }
 
 /** header line for Task View: priority marker + title, truncated to the header box. */
 function headerText(task: Task): string {
@@ -32,41 +35,43 @@ function headerText(task: Task): string {
 
 /**
  * Task detail / Focus screen. Full mode shows description and checkable
- * subtasks; Focus mode is a two-line minimal display (clock + task name),
- * with a brief tap-triggered peek back to the full content, and a meeting
- * banner when one is starting soon. See README for the gesture model.
+ * subtasks. Focus mode is the compact, heads-down view for working through
+ * a checklist: title, the same checkable subtasks (in the glasses' one
+ * fixed-size font — there is no size control on this platform), and an
+ * upcoming-meeting banner. With no tap for 10s it blanks; any tap wakes it
+ * without also acting on that tap. See README for the gesture model.
  */
 export class FocusScreen implements Screen {
   readonly name = 'focus'
   private taskId: string | null = null
   private subMode: 'full' | 'focus' = 'full'
-  private peeking = false
-  private peekTimer: ReturnType<typeof setTimeout> | null = null
+  private blanked = false
+  private idleTimer: ReturnType<typeof setTimeout> | null = null
   private subtaskIds: string[] = []
-  private lastMinimalKey = ''
 
   constructor(private readonly ctx: ScreenContext) {}
 
   enter(): void {
     this.taskId = this.ctx.getFocusTaskId()
     this.subMode = 'full'
-    this.peeking = false
-    this.lastMinimalKey = ''
+    this.blanked = false
+    this.clearIdleTimer()
     this.render()
     this.ctx.log(`screen=focus task=${this.taskId ?? 'none'}`)
   }
 
   exit(): void {
-    this.clearPeekTimer()
+    this.clearIdleTimer()
   }
 
   onState(): void {
     if (this.subMode === 'full') this.render()
-    // While in Focus mode the display is intentionally static between ticks.
+    else if (!this.blanked) this.renderFocusPage() // a blank screen ignores data changes until woken
   }
 
   onTick(): void {
-    if (this.subMode === 'focus' && !this.peeking) this.renderMinimal()
+    // The clock and the meeting countdown are time-based, so Focus mode redraws once a minute too.
+    if (this.subMode === 'focus' && !this.blanked) this.renderFocusPage()
   }
 
   onInput(input: GlassesInput): void {
@@ -93,19 +98,32 @@ export class FocusScreen implements Screen {
   }
 
   private onFocusInput(input: GlassesInput): void {
+    if (this.blanked) {
+      // The first tap after blanking only wakes the screen — it doesn't also act on whatever
+      // would otherwise be under it, so a half-asleep tap can't accidentally toggle a subtask.
+      this.blanked = false
+      this.resetIdleTimer()
+      this.renderFocusPage()
+      return
+    }
     switch (input.t) {
+      case 'listSelect':
+        this.resetIdleTimer()
+        this.selectSubtask(input.index, input.name)
+        return
       case 'click':
-        this.startPeek()
+        this.resetIdleTimer() // only reachable with no visible subtasks — nothing to toggle
         return
       case 'doubleClick':
         // Two taps exit focus mode entirely — back to the persistent full view.
-        this.clearPeekTimer()
+        this.clearIdleTimer()
         this.subMode = 'full'
-        this.peeking = false
+        this.blanked = false
         this.render()
         this.ctx.log('focus: mode=full')
         return
       case 'menu':
+        this.resetIdleTimer()
         this.onMinMenu(input.itemID)
         return
       default:
@@ -113,31 +131,26 @@ export class FocusScreen implements Screen {
     }
   }
 
-  private startPeek(): void {
-    this.peeking = true
-    this.clearPeekTimer()
-    this.render()
-    this.peekTimer = setTimeout(() => {
-      this.peeking = false
-      // The peek replaced the display with the full page: renderMinimal's dedup guard must not
-      // suppress this rebuild just because the minimal content itself hasn't changed since.
-      this.lastMinimalKey = ''
-      this.renderMinimal()
-    }, PEEK_MS)
+  private resetIdleTimer(): void {
+    this.clearIdleTimer()
+    this.idleTimer = setTimeout(() => {
+      this.blanked = true
+      this.renderFocusPage()
+    }, IDLE_MS)
   }
 
-  private clearPeekTimer(): void {
-    if (this.peekTimer) clearTimeout(this.peekTimer)
-    this.peekTimer = null
+  private clearIdleTimer(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer)
+    this.idleTimer = null
   }
 
   private onFullMenu(itemID: number): void {
     switch (itemID) {
       case FOCUS_FULL_MENU.FOCUS:
         this.subMode = 'focus'
-        this.peeking = false
-        this.lastMinimalKey = ''
-        this.renderMinimal()
+        this.blanked = false
+        this.renderFocusPage()
+        this.resetIdleTimer()
         this.ctx.log('focus: mode=focus')
         return
       case FOCUS_FULL_MENU.TASKS:
@@ -154,9 +167,9 @@ export class FocusScreen implements Screen {
   private onMinMenu(itemID: number): void {
     switch (itemID) {
       case FOCUS_MIN_MENU.FULL:
-        this.clearPeekTimer()
+        this.clearIdleTimer()
         this.subMode = 'full'
-        this.peeking = false
+        this.blanked = false
         this.render()
         this.ctx.log('focus: mode=full')
         return
@@ -185,31 +198,26 @@ export class FocusScreen implements Screen {
     return this.taskId ? this.ctx.store.getState().tasks.find(t => t.id === this.taskId) : undefined
   }
 
-  /** Full mode (and, identically, the 10s peek): header, notes, and checkable subtasks. */
+  /** "Hide completed" applies to subtasks too, same as it does to the top-level Tasks list. */
+  private visibleSubtasks(task: Task): Subtask[] {
+    const showCompleted = this.ctx.settings.get().showCompleted
+    return orderedSubtasks(showCompleted ? task.subtasks : task.subtasks.filter(s => !s.completed)).slice(0, MAX_SUBTASK_ROWS)
+  }
+
+  /** Full mode: header, notes, and checkable subtasks. */
   private render(): void {
-    if (this.subMode === 'focus' && this.peeking) {
-      void this.ctx.display.showPage(this.buildFullPage(true))
-      return
-    }
     const task = this.currentTask()
     if (!task) {
       // The task left today's list (completed elsewhere, moved, deleted) — nothing left to show.
       this.ctx.go('tasks')
       return
     }
-    void this.ctx.display.showPage(this.buildFullPage(false))
+    void this.ctx.display.showPage(this.buildFullPage(task))
   }
 
-  private buildFullPage(readOnly: boolean): PageSpec {
-    const task = this.currentTask()
+  private buildFullPage(task: Task): PageSpec {
     const menu = buildFocusFullMenu()
-    if (!task) return { texts: [{ ...EVT, content: 'Task no longer available.\nDouble-tap to go back.', capture: true }], menu }
-
-    const hasSubtasks = task.subtasks.length > 0
-    const showCompleted = this.ctx.settings.get().showCompleted
-    // "Hide completed" applies here too: a completed subtask disappears from the list, same as a
-    // completed task disappears from Tasks.
-    const visible = orderedSubtasks(showCompleted ? task.subtasks : task.subtasks.filter(s => !s.completed)).slice(0, MAX_SUBTASK_ROWS)
+    const visible = this.visibleSubtasks(task)
     const header = { ...HDR, content: headerText(task) }
 
     if (visible.length === 0) {
@@ -217,7 +225,7 @@ export class FocusScreen implements Screen {
       // ★ not ✓: the glasses font only documents a specific glyph set, and a checkmark isn't in
       // it — confirmed in the simulator, it silently renders as blank space. ★ is the same glyph
       // the empty Tasks list already uses for "all done", so this stays consistent too.
-      const status = hasSubtasks ? `★ All ${task.subtasksTotal} subtasks done` : ''
+      const status = task.subtasks.length > 0 ? `★ All ${task.subtasksTotal} subtasks done` : ''
       const notesText = truncateUtf8([stripHtml(task.notes), status].filter(Boolean).join('\n\n') || ' ', NOTES_CHARS_ALONE)
       return { texts: [{ ...EVT, content: ' ', capture: true, padding: 0 }, header, { ...NOTES_ALONE, content: notesText }], menu }
     }
@@ -226,39 +234,49 @@ export class FocusScreen implements Screen {
     this.subtaskIds = visible.map(s => s.id)
     return {
       texts: [header, notes],
-      lists: [{ ...LIST, items: visible.map(subtaskRowLabel), capture: !readOnly }],
-      // readOnly (peek) still needs exactly one capturing container: the invisible full-bleed layer.
-      ...(readOnly ? { texts: [{ ...EVT, content: ' ', capture: true, padding: 0 }, header, notes] } : {}),
+      lists: [{ ...LIST, items: visible.map(subtaskRowLabel), capture: true }],
       menu,
     }
   }
 
-  /** Focus mode: two lines at the top, plus an upcoming-meeting banner when one applies. */
-  private renderMinimal(): void {
+  /**
+   * Focus mode: title + clock on one tight line, the same checkable subtask
+   * list as Full mode below it, and a meeting banner on top when the
+   * reminder is due. Always a full rebuild — simpler than diffing, and no
+   * hotter a path than a subtask toggle already is.
+   */
+  private renderFocusPage(): void {
     const task = this.currentTask()
     if (!task) {
       this.ctx.go('tasks')
       return
     }
+    const menu = buildFocusMinMenu()
+    if (this.blanked) {
+      void this.ctx.display.showPage({ texts: [{ ...F_EVT, content: ' ', capture: true, padding: 0 }], menu })
+      return
+    }
+
     const state = this.ctx.store.getState()
     const appSettings = this.ctx.settings.get()
     const meeting = appSettings.meetingReminderEnabled
       ? nextMeetingSoon(state.events, state.day, state.tz, this.ctx.now(), appSettings.meetingReminderLeadMin)
       : null
-    const banner = meeting ? formatMeetingBanner(meeting) : ''
-    const clock = formatClock(this.ctx.now(), appSettings.clock24h)
-    const title = truncateUtf8(`${priorityPrefix(task.priority)}${cleanTitle(task.title)}`, 90)
-    const key = JSON.stringify([banner, clock, title])
-    if (key === this.lastMinimalKey) return
-    this.lastMinimalKey = key
+    const banner = { ...F_BANNER, content: meeting ? formatMeetingBanner(meeting) : ' ' }
+    const title = { ...F_TITLE, content: truncateUtf8(`${priorityPrefix(task.priority)}${cleanTitle(task.title)}`, 60) }
+    const clock = { ...F_CLOCK, content: formatClock(this.ctx.now(), appSettings.clock24h) }
+
+    const visible = this.visibleSubtasks(task)
+    if (visible.length === 0) {
+      this.subtaskIds = []
+      void this.ctx.display.showPage({ texts: [{ ...F_EVT, content: ' ', capture: true, padding: 0 }, banner, title, clock], menu })
+      return
+    }
+    this.subtaskIds = visible.map(s => s.id)
     void this.ctx.display.showPage({
-      texts: [
-        { ...EVT, content: ' ', capture: true, padding: 0 },
-        { ...MIN_BANNER, content: banner || ' ' },
-        { ...MIN_CLOCK, content: clock },
-        { ...MIN_TITLE, content: title },
-      ],
-      menu: buildFocusMinMenu(),
+      texts: [banner, title, clock],
+      lists: [{ ...F_LIST, items: visible.map(subtaskRowLabel), capture: true }],
+      menu,
     })
   }
 }

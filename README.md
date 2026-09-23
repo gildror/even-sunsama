@@ -35,9 +35,16 @@ shows while the plugin is open. `src/core/summary.ts` is the piece a real widget
 | Face | Open tasks | Exit dialog | Menu: Tasks · Refresh · Hide/Show completed |
 | Tasks | Task with no subtasks: check off / un-check. Task with subtasks: opens Task View | Back to face | Menu: Face · Refresh · Hide/Show completed · **Open** |
 | Task View — full mode | Check off / un-check a subtask | Back to tasks | Menu: **Focus** · Tasks · Refresh |
-| Task View — Focus mode | Peek at full view for 10 s | Exit Focus mode (back to full) | Menu: Full view · Tasks |
+| Task View — Focus mode | Check off / un-check a subtask (or just wake the screen, if blanked) | Exit Focus mode (back to full) | Menu: Full view · Tasks |
 
 Header markers: `~` syncing, `! failed` a check-off was rolled back, `! offline` / `! stale` data may be old.
+
+**Focus mode blanks after 10s idle.** The platform has no display-sleep API, so this is a real blank
+page rather than a true backlight-off — any tap wakes it instantly. That first tap only wakes the
+screen; it never also acts on whatever's under it, so a half-asleep tap can't accidentally toggle a
+subtask. The G2 SDK also has no font-size control at all (checked against the SDK's own types — the
+only per-text knob is brightness, 0–4), so Focus mode fits title, subtasks and the meeting banner into
+the same fixed system font as everywhere else in the app, just laid out tightly.
 
 **Why "Open" targets the *last-tapped* task, not a selection.** The platform gives the app no way to
 learn which list row is under the cursor without also firing that row's tap action — swipes are
