@@ -25,6 +25,10 @@ Requires a Sunsama account on the Pro plan (Sunsama's app access is a Pro featur
 First release: glance screen, task list with tap-to-complete, contextual menu, offline cache.
 
 ## Assets
-- Icon: `public/icon.png` (24×24 greyscale, packed into the .ehpk)
-- Background: `store/background.png` (1200×600 greyscale)
-- Screenshots: `store/screenshots/` (captured with the simulator's screenshot API)
+- **Icon / "foreground"**: `store/icon-store-24x24.png` (identical to `public/icon.png`, the one packed
+  into the .ehpk). 24×24, 1-bit black/white, built entirely from 2×2 pixel blocks — meets the portal's
+  stricter store-icon rule (no single-pixel lines, no anti-aliasing). Upload this into the Developer
+  Portal's 24×24 pixel editor for the store listing's foreground/icon field.
+- **Background**: `store/background.png`, greyscale. Portal upload form states the exact required
+  pixel size on the page — resize this to match if it differs from the placeholder's 1200×600.
+- **Screenshots**: `store/screenshots/` (captured with the simulator's screenshot API, not mocked up).
