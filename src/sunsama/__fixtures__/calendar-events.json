@@ -1,7 +1,8 @@
 {
   "events": [
-    { "eventId": "ev-allday", "title": "Out of office", "startTime": "12:00 AM", "duration": 0, "isAllDay": true, "isMeeting": false },
-    { "eventId": "ev-meeting", "title": "Standup", "startTime": "9:00 AM", "duration": 15, "isAllDay": false, "isMeeting": true },
-    { "eventId": "ev-focus", "title": "Focus block", "startTime": "10:00 AM", "duration": 60, "isAllDay": false, "isMeeting": false }
+    { "eventId": "ev-allday", "title": "Out of office", "startTime": "12:00 AM", "duration": 0, "isAllDay": true, "isMeeting": false, "transparency": "opaque" },
+    { "eventId": "ev-meeting", "title": "Standup", "startTime": "9:00 AM", "duration": 15, "isAllDay": false, "isMeeting": true, "transparency": "opaque" },
+    { "eventId": "ev-focus", "title": "Focus block", "startTime": "10:00 AM", "duration": 60, "isAllDay": false, "isMeeting": false, "transparency": "opaque" },
+    { "eventId": "ev-declined", "title": "Optional sync", "startTime": "3:00 PM", "duration": 30, "isAllDay": false, "isMeeting": true, "transparency": "transparent" }
   ]
 }

@@ -35,6 +35,7 @@ const state = (tasks: Task[], patch: Partial<StoreState> = {}): StoreState => ({
   tz: 'America/New_York',
   tasks,
   events: [],
+  objectives: [],
   pending: {},
   pendingSubtasks: {},
   status: 'idle',
@@ -213,12 +214,36 @@ describe('buildTasksView', () => {
 })
 
 describe('face and message views', () => {
-  it('puts the open count and the highest-priority next task on the face', () => {
+  it('shows the open count, date/time, weekly objectives and meeting count', () => {
     const now = new Date(2026, 8, 20, 14, 5)
     const tasks = [task('a', true), task('b', false, '🎯 Plan week', 'normal'), task('c', false, 'Urgent thing', 'urgent')]
-    const view = buildFaceView(state(tasks, { lastSyncAt: now.getTime() }), DEFAULT_SETTINGS, now)
-    expect(view).toMatchObject({ count: '2', caption: 'open · 1 done', clock: '2:05', date: 'Sun 20 Sep', next: '▶ Urgent thing', status: '' })
-    expect(buildFaceView(state([task('a', true)]), { ...DEFAULT_SETTINGS, clock24h: true }, now)).toMatchObject({ count: '0', caption: 'all done · 1', clock: '14:05', next: '' })
+    const objectives = [
+      { id: 'o1', title: 'Ship redesign', completed: true },
+      { id: 'o2', title: 'Hire lead', completed: false },
+    ]
+    const events = [
+      { id: 'e1', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false, isBusy: true },
+      { id: 'e2', title: 'Declined', startTime: '1:00 PM', durationMin: 30, isMeeting: true, isAllDay: false, isBusy: false },
+    ]
+    const view = buildFaceView(state(tasks, { lastSyncAt: now.getTime(), objectives, events }), DEFAULT_SETTINGS, now)
+    expect(view.openLine).toBe('2 open')
+    expect(view.dateTime).toBe('Sun 20 Sep · 2:05')
+    expect(view.objectivesLine).toBe('This week (1/2):\n● Ship redesign\n○ Hire lead')
+    expect(view.meetingsLine).toBe('1 meeting today')
+
+    expect(buildFaceView(state([task('a', true)], { objectives: [], events: [], lastSyncAt: now.getTime() }), { ...DEFAULT_SETTINGS, clock24h: true }, now)).toMatchObject({
+      openLine: '0 open',
+      dateTime: 'Sun 20 Sep · 14:05',
+      objectivesLine: 'No weekly objectives set',
+      meetingsLine: 'No meetings today',
+    })
+  })
+
+  it('respects the channel filter and shows a sync status marker', () => {
+    const now = new Date(2026, 8, 20, 14, 5)
+    const tasks = [task('a', false, 'Work task', null, 'Work'), task('b', false, 'Personal task', null, 'Personal')]
+    const view = buildFaceView(state(tasks, { lastSyncAt: now.getTime(), status: 'error' }), { ...DEFAULT_SETTINGS, channelFilter: ['Work'] }, now)
+    expect(view.openLine).toBe('1 open  ! offline')
   })
 
   it('explains why there is nothing to show', () => {

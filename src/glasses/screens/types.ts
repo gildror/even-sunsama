@@ -22,8 +22,6 @@ export interface ScreenContext {
   getFocusTaskId(): string | null
   /** Opens the system exit dialog. */
   exitApp(): void
-  /** PNG bytes for large text; injected so screens stay testable without a canvas. */
-  renderBigText(text: string, width: number, height: number, align?: 'left' | 'center'): Promise<Uint8Array>
 }
 
 export interface Screen {

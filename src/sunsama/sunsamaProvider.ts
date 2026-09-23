@@ -1,7 +1,7 @@
-import type { CalendarEvent, Profile, Task, TaskProvider } from '../core/types'
+import type { CalendarEvent, Profile, Task, TaskProvider, WeeklyObjective } from '../core/types'
 import { McpRpcError } from './mcpClient'
 import type { McpClient } from './mcpClient'
-import { parseCalendarEvents, parseMe, parseTasksResource } from './parse'
+import { parseCalendarEvents, parseMe, parseTasksResource, parseWeeklyObjectives } from './parse'
 
 /** Sunsama through its official MCP server. */
 export class SunsamaProvider implements TaskProvider {
@@ -20,6 +20,10 @@ export class SunsamaProvider implements TaskProvider {
 
   async getEventsForDay(day: string): Promise<CalendarEvent[]> {
     return parseCalendarEvents(await this.read(`sunsama://calendar/events/${day}`))
+  }
+
+  async getWeeklyObjectives(day: string): Promise<WeeklyObjective[]> {
+    return parseWeeklyObjectives(await this.read(`sunsama://objectives/${day}`))
   }
 
   async setCompleted(id: string, completed: boolean, day: string): Promise<void> {

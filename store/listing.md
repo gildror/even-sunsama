@@ -12,10 +12,11 @@ Today's Sunsama tasks on your glasses. Tap to check them off.
 ## Description
 See today's Sunsama task list on your Even G2 and tick tasks off with a tap, phone in your pocket.
 
-- Glance screen: how many tasks are still open, the time, and the next task up.
+- Glance screen: a small open-task count and clock, and the main screen given over to this week's Sunsama objectives and how many of today's meetings you're actually attending.
 - Task list: today's tasks with open ones first, grouped by priority, and subtask progress. Tap a task to complete it; tap again to reopen it. Changes sync to Sunsama right away.
 - Task View: tapping a task with subtasks opens its full description and checkable subtasks instead of completing it — the task finishes on its own once every subtask is checked off.
-- Focus mode: a distraction-free view showing just the clock and task name, with a heads-up banner when a meeting is starting soon. Tap to peek at the full view, double-tap to come back.
+- Focus mode: the task and its subtasks in a tight, heads-down layout, with a banner when a meeting is starting soon (on/off and lead time are both adjustable). Goes blank after 10 seconds idle; any tap wakes it.
+- Channel filter: show every Sunsama channel on the glasses, or just the ones you pick.
 - Contextual menu on every screen: switch screens, refresh, hide completed tasks, open a task.
 - Works offline from the last sync and never shows a blank screen.
 
@@ -24,7 +25,7 @@ Setup takes a minute: sign in to Sunsama on the phone at gildror.github.io/even-
 Requires a Sunsama account on the Pro plan (Sunsama's app access is a Pro feature). Not affiliated with Sunsama.
 
 ## Changelog 1.0.0
-First release: glance screen, priority-grouped task list with tap-to-complete, Task View with subtasks, Focus mode with meeting reminders, contextual menu, offline cache.
+First release: glance screen with weekly objectives and meeting count, priority-grouped task list with tap-to-complete, Task View with subtasks, Focus mode with meeting reminders, channel filter, contextual menu, offline cache.
 
 ## Assets
 - **Icon / "foreground"**: `store/icon-store-24x24.png` (identical to `public/icon.png`, the one packed

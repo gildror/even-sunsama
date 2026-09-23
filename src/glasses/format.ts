@@ -81,6 +81,13 @@ export function subtaskRowLabel(subtask: Subtask): string {
   return prefix + truncateUtf8(cleanTitle(subtask.title) || '(untitled)', room)
 }
 
+/** `○ Ship the redesign`, for a plain-text line rather than a list row — a wider budget than {@link subtaskRowLabel}. */
+export function objectiveRowLabel(objective: { title: string; completed: boolean }, maxBytes = 56): string {
+  const prefix = `${objective.completed ? GLYPHS.done : GLYPHS.open} `
+  const room = maxBytes - utf8Length(prefix)
+  return prefix + truncateUtf8(cleanTitle(objective.title) || '(untitled)', room)
+}
+
 /** Strips Sunsama's rich-text HTML notes down to plain, glasses-safe text. */
 export function stripHtml(html: string): string {
   if (!html) return ''

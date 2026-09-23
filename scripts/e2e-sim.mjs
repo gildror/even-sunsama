@@ -137,12 +137,12 @@ async function run() {
   console.log('\nHappy path')
   let sim = await launchSimulator('?priority=flat')
   await expectLog('[app] screen=face open=3', 30_000)
-  await sleep(1500) // images are pushed after the page
+  await sleep(400)
   const face = await screenshot('face')
-  const count = litPixels(face, { x: 8, y: 48, w: 200, h: 144 })
-  const clock = litPixels(face, { x: 280, y: 48, w: 288, h: 144 })
-  check('face: open count drawn on the left', count > 800, `${count} lit px`)
-  check('face: clock drawn on the right', clock > 2000, `${clock} lit px`)
+  const openStrip = litPixels(face, { x: 8, y: 6, w: 200, h: 24 })
+  const objectives = litPixels(face, { x: 8, y: 48, w: 560, h: 100 })
+  check('face: open count drawn', openStrip > 50, `${openStrip} lit px`)
+  check('face: weekly objectives drawn', objectives > 200, `${objectives} lit px`)
 
   await input('click')
   await expectLog('[app] screen=tasks rows=5')

@@ -58,9 +58,6 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
       <label>Start screen
         <select id="startScreen"><option value="face">Face</option><option value="tasks">Tasks</option></select>
       </label>
-      <label>Face numbers
-        <select id="faceClockMode"><option value="image">Large (image)</option><option value="text">Plain text</option></select>
-      </label>
       <label>Refresh every (seconds) <input id="pollSeconds" type="number" min="30" max="3600" step="30" /></label>
       <label class="check"><input id="showCompleted" type="checkbox" /> Show completed tasks</label>
       <label class="check"><input id="clock24h" type="checkbox" /> 24-hour clock</label>
@@ -146,7 +143,6 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
   function renderSettings(): void {
     const v = settings.get()
     $<HTMLSelectElement>('startScreen').value = v.startScreen
-    $<HTMLSelectElement>('faceClockMode').value = v.faceClockMode
     $<HTMLInputElement>('pollSeconds').value = String(v.pollSeconds)
     $<HTMLInputElement>('showCompleted').checked = v.showCompleted
     $<HTMLInputElement>('clock24h').checked = v.clock24h
@@ -158,7 +154,6 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
     $(id).addEventListener('change', e => settings.update({ [key]: read(e.target) } as Partial<Settings>))
   }
   bind('startScreen', 'startScreen', el => el.value)
-  bind('faceClockMode', 'faceClockMode', el => el.value)
   bind('pollSeconds', 'pollSeconds', el => Number(el.value))
   bind('showCompleted', 'showCompleted', el => el.checked)
   bind('clock24h', 'clock24h', el => el.checked)

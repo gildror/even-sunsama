@@ -77,3 +77,12 @@ export function nextMeetingSoon(events: CalendarEvent[], day: string, tz: string
   }
   return best
 }
+
+/** Real, non-all-day meetings today that show as busy — see `CalendarEvent.isBusy`. */
+export function acceptedMeetingsToday(events: CalendarEvent[]): number {
+  return events.filter(e => e.isMeeting && !e.isAllDay && e.isBusy).length
+}
+
+export function objectivesDone(objectives: { completed: boolean }[]): number {
+  return objectives.filter(o => o.completed).length
+}

@@ -31,17 +31,30 @@ export interface CalendarEvent {
   durationMin: number
   isMeeting: boolean
   isAllDay: boolean
+  /**
+   * Sunsama's calendar data carries no explicit RSVP/acceptance status. `isBusy` (from
+   * transparency !== 'transparent') is the closest available signal to "you're attending" —
+   * a declined or free/tentative event typically shows as transparent.
+   */
+  isBusy: boolean
+}
+
+export interface WeeklyObjective {
+  id: string
+  title: string
+  completed: boolean
 }
 
 export interface Profile {
   timezone: string
 }
 
-/** Anything that can list a day's tasks/events and manipulate them (Sunsama, mock, future sources). */
+/** Anything that can list a day's tasks/events/objectives and manipulate them (Sunsama, mock, future sources). */
 export interface TaskProvider {
   getProfile(): Promise<Profile>
   listTasks(day: string): Promise<Task[]>
   getEventsForDay(day: string): Promise<CalendarEvent[]>
+  getWeeklyObjectives(day: string): Promise<WeeklyObjective[]>
   /** `day` is today's date (YYYY-MM-DD) in the account timezone; used as the completion day. */
   setCompleted(id: string, completed: boolean, day: string): Promise<void>
   setSubtaskCompleted(taskId: string, subtaskId: string, completed: boolean): Promise<void>
@@ -62,6 +75,7 @@ export interface StoreState {
   tz: string
   tasks: Task[]
   events: CalendarEvent[]
+  objectives: WeeklyObjective[]
   /** Task id -> completion value we are still sending to the provider. */
   pending: Record<string, boolean>
   /** Subtask id -> completion value we are still sending to the provider. */
@@ -81,7 +95,6 @@ export interface Settings {
   showCompleted: boolean
   clock24h: boolean
   pollSeconds: number
-  faceClockMode: 'image' | 'text'
   /** Empty = every channel. Non-empty = only tasks whose channel is in this list. */
   channelFilter: string[]
   meetingReminderEnabled: boolean

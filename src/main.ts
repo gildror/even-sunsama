@@ -6,7 +6,6 @@ import { SyncController } from './core/sync'
 import { TaskStore } from './core/taskStore'
 import type { TaskProvider } from './core/types'
 import { GlassesApp } from './glasses/app'
-import { renderBigText } from './glasses/bigText'
 import { BridgeDisplay } from './glasses/display'
 import { mountPhoneUi } from './phone/ui'
 import './phone/styles.css'
@@ -85,7 +84,6 @@ if (bridge) {
     sync,
     now: () => new Date(),
     log: m => logger.log('app', m),
-    renderBigText,
   })
   app.start()
   bridge.onEvenHubEvent(event => app.handleEvent(event))

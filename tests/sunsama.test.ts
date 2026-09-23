@@ -3,11 +3,12 @@ import { AuthRequiredError } from '../src/core/types'
 import type { KeyValueStore } from '../src/core/types'
 import { McpClient } from '../src/sunsama/mcpClient'
 import { TokenManager, decodeBundle } from '../src/sunsama/oauth'
-import { McpToolError, parseCalendarEvents, parseMe, parseTasksResource, sseToMessages, unwrapResourceResult, unwrapToolResult } from '../src/sunsama/parse'
+import { McpToolError, parseCalendarEvents, parseMe, parseTasksResource, parseWeeklyObjectives, sseToMessages, unwrapResourceResult, unwrapToolResult } from '../src/sunsama/parse'
 import { SunsamaProvider } from '../src/sunsama/sunsamaProvider'
 import meFixture from '../src/sunsama/__fixtures__/me.json'
 import tasksFixture from '../src/sunsama/__fixtures__/tasks.json'
 import calendarFixture from '../src/sunsama/__fixtures__/calendar-events.json'
+import objectivesFixture from '../src/sunsama/__fixtures__/objectives.json'
 
 class MemoryKv implements KeyValueStore {
   data = new Map<string, string>()
@@ -47,14 +48,21 @@ describe('parse', () => {
     expect(tasks[1]).toMatchObject({ priority: null, notes: '', timeEstimate: undefined })
   })
 
-  it('parses calendar events, keeping raw start times and meeting/all-day flags', () => {
+  it('parses calendar events, keeping raw start times, meeting/all-day flags and busy status', () => {
     const events = parseCalendarEvents(calendarFixture)
     expect(events).toEqual([
-      { id: 'ev-allday', title: 'Out of office', startTime: '12:00 AM', durationMin: 0, isMeeting: false, isAllDay: true },
-      { id: 'ev-meeting', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false },
-      { id: 'ev-focus', title: 'Focus block', startTime: '10:00 AM', durationMin: 60, isMeeting: false, isAllDay: false },
+      { id: 'ev-allday', title: 'Out of office', startTime: '12:00 AM', durationMin: 0, isMeeting: false, isAllDay: true, isBusy: true },
+      { id: 'ev-meeting', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false, isBusy: true },
+      { id: 'ev-focus', title: 'Focus block', startTime: '10:00 AM', durationMin: 60, isMeeting: false, isAllDay: false, isBusy: true },
+      { id: 'ev-declined', title: 'Optional sync', startTime: '3:00 PM', durationMin: 30, isMeeting: true, isAllDay: false, isBusy: false },
     ])
     expect(() => parseCalendarEvents({ nope: true })).toThrow()
+  })
+
+  it('parses weekly objectives', () => {
+    const objectives = parseWeeklyObjectives({ objectives: [{ _id: 'o1', title: 'Ship it', completed: true }] })
+    expect(objectives).toEqual([{ id: 'o1', title: 'Ship it', completed: true }])
+    expect(() => parseWeeklyObjectives({ nope: true })).toThrow()
   })
 
   it('reads the timezone from the profile', () => {
@@ -145,7 +153,8 @@ function fakeServer(options: { sse?: boolean; resources?: boolean } = {}) {
     if (body.method === 'notifications/initialized') return new Response(null, { status: 202 })
     if (headers['mcp-session-id'] !== state.session) return new Response('Session not found', { status: 404 })
 
-    const fixtureFor = (uri: string) => (uri.endsWith('/me') ? meFixture : uri.includes('/calendar/') ? calendarFixture : tasksFixture)
+    const fixtureFor = (uri: string) =>
+      uri.endsWith('/me') ? meFixture : uri.includes('/calendar/') ? calendarFixture : uri.includes('/objectives') ? objectivesFixture : tasksFixture
     let result: unknown
     if (body.method === 'resources/read') {
       if (!state.resources) return json({ jsonrpc: '2.0', id: body.id, error: { code: -32601, message: 'Method not found' } })
@@ -209,8 +218,18 @@ describe('McpClient + SunsamaProvider', () => {
     const server = fakeServer()
     const provider = new SunsamaProvider(clientFor(server))
     const events = await provider.getEventsForDay('2026-09-20')
-    expect(events).toHaveLength(3)
+    expect(events).toHaveLength(4)
     expect(events.find(e => e.id === 'ev-meeting')).toMatchObject({ isMeeting: true, startTime: '9:00 AM' })
+  })
+
+  it('fetches and parses weekly objectives', async () => {
+    const server = fakeServer()
+    const provider = new SunsamaProvider(clientFor(server))
+    const objectives = await provider.getWeeklyObjectives('2026-09-20')
+    expect(objectives).toEqual([
+      { id: 'o1', title: 'Ship redesign', completed: true },
+      { id: 'o2', title: 'Hire lead', completed: false },
+    ])
   })
 
   it('falls back to the read_resource tool when resources/read is unsupported, and remembers it', async () => {

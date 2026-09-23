@@ -1,0 +1,6 @@
+{
+  "objectives": [
+    { "_id": "o1", "title": "Ship redesign", "completed": true },
+    { "_id": "o2", "title": "Hire lead", "completed": false }
+  ]
+}

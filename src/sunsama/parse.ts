@@ -1,4 +1,4 @@
-import type { CalendarEvent, Priority, Profile, Subtask, Task } from '../core/types'
+import type { CalendarEvent, Priority, Profile, Subtask, Task, WeeklyObjective } from '../core/types'
 
 const PRIORITIES = new Set(['urgent', 'important', 'normal', 'low'])
 const parsePriority = (value: unknown): Priority => (typeof value === 'string' && PRIORITIES.has(value) ? (value as Priority) : null)
@@ -104,7 +104,19 @@ export function parseCalendarEvents(payload: unknown): CalendarEvent[] {
       durationMin: typeof e.duration === 'number' ? e.duration : 0,
       isMeeting: Boolean(e.isMeeting),
       isAllDay: Boolean(e.isAllDay),
+      // Anything other than the literal 'transparent' counts as busy — an unexpected or missing
+      // value should not silently drop a real meeting from the count.
+      isBusy: e.transparency !== 'transparent',
     }))
+}
+
+/** Payload of `sunsama://objectives{/day}` -> this week's objectives. */
+export function parseWeeklyObjectives(payload: unknown): WeeklyObjective[] {
+  const list = Array.isArray(payload) ? payload : (payload as any)?.objectives
+  if (!Array.isArray(list)) throw new Error('Unexpected Sunsama objectives response')
+  return list
+    .filter(o => o && typeof o._id === 'string')
+    .map(o => ({ id: o._id, title: String(o.title ?? '').trim() || '(untitled)', completed: Boolean(o.completed) }))
 }
 
 /** Payload of `sunsama://me` -> profile. */

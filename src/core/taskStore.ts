@@ -1,6 +1,6 @@
 import { todayInTz } from './time'
 import { AuthRequiredError } from './types'
-import type { AuthState, CalendarEvent, KeyValueStore, StoreState, Subtask, Task, TaskProvider } from './types'
+import type { AuthState, CalendarEvent, KeyValueStore, StoreState, Subtask, Task, TaskProvider, WeeklyObjective } from './types'
 
 const CACHE_KEY = 'tasks.cache.v1'
 
@@ -9,6 +9,7 @@ interface Cache {
   tz: string
   tasks: Task[]
   events?: CalendarEvent[]
+  objectives?: WeeklyObjective[]
   lastSyncAt?: number
 }
 
@@ -30,6 +31,7 @@ export class TaskStore {
     tz: '',
     tasks: [],
     events: [],
+    objectives: [],
     pending: {},
     pendingSubtasks: {},
     status: 'idle',
@@ -72,7 +74,14 @@ export class TaskStore {
       if (!cache.tz || !Array.isArray(cache.tasks)) return
       const today = todayInTz(cache.tz, this.now())
       if (cache.day === today) {
-        this.patch({ day: cache.day, tz: cache.tz, tasks: cache.tasks, events: cache.events ?? [], lastSyncAt: cache.lastSyncAt })
+        this.patch({
+          day: cache.day,
+          tz: cache.tz,
+          tasks: cache.tasks,
+          events: cache.events ?? [],
+          objectives: cache.objectives ?? [],
+          lastSyncAt: cache.lastSyncAt,
+        })
       } else {
         this.patch({ day: today, tz: cache.tz })
       }
@@ -98,11 +107,15 @@ export class TaskStore {
         this.profileLoaded = true
       }
       const day = todayInTz(tz, this.now())
-      const [fetchedTasks, events] = await Promise.all([this.provider.listTasks(day), this.provider.getEventsForDay(day)])
+      const [fetchedTasks, events, objectives] = await Promise.all([
+        this.provider.listTasks(day),
+        this.provider.getEventsForDay(day),
+        this.provider.getWeeklyObjectives(day),
+      ])
       const tasks = fetchedTasks.map(t => this.withLocalOverrides(t))
-      this.patch({ day, tz, tasks, events, status: 'idle', lastSyncAt: this.now().getTime(), lastError: undefined, auth: 'signedIn' })
+      this.patch({ day, tz, tasks, events, objectives, status: 'idle', lastSyncAt: this.now().getTime(), lastError: undefined, auth: 'signedIn' })
       this.persist()
-      this.log(`refresh ok day=${day} tasks=${tasks.length} events=${events.length}`)
+      this.log(`refresh ok day=${day} tasks=${tasks.length} events=${events.length} objectives=${objectives.length}`)
     } catch (err) {
       this.fail(err)
       throw err
@@ -214,8 +227,8 @@ export class TaskStore {
   }
 
   private persist(): void {
-    const { day, tz, tasks, events, lastSyncAt } = this.state
-    const cache: Cache = { day, tz, tasks, events, lastSyncAt }
+    const { day, tz, tasks, events, objectives, lastSyncAt } = this.state
+    const cache: Cache = { day, tz, tasks, events, objectives, lastSyncAt }
     void this.kv.set(CACHE_KEY, JSON.stringify(cache)).catch(() => {})
   }
 

@@ -3,8 +3,9 @@
 An [Even Hub](https://hub.evenrealities.com/docs/get-started/overview) plugin that shows today's
 [Sunsama](https://www.sunsama.com) tasks on Even Realities G2 glasses and lets you check them off.
 
-- **Face screen** (opens first): highest-priority open task's count on the left, clock on the right,
-  next task below.
+- **Face screen** (opens first): a small open-task count and clock/date strip up top, with the main
+  screen given over to this week's Sunsama objectives and how many of today's calendar meetings you're
+  actually attending (see "accepted meetings", below).
 - **Tasks screen**: today's tasks, open ones first, grouped by Sunsama's daily priority (urgent →
   important → normal → low) when more than one is in play and it still fits on one page. Tap to
   check off or un-check.
@@ -12,12 +13,11 @@ An [Even Hub](https://hub.evenrealities.com/docs/get-started/overview) plugin th
   subtasks can only be completed by finishing all of them, so *Full mode* shows the description and
   checkable subtasks instead of toggling it — the task itself completes automatically once every
   subtask is checked off, and un-completes if you uncheck one afterwards. (The Tasks menu's **Open**
-  item also reaches it, for any
-  task, including ones without subtasks that you just want to read the notes on.) Its own menu's
-  **Focus** item switches to *Focus mode* — just the clock and task name, for working heads-down —
-  with an upcoming-meeting banner (`◆ Meeting in N minutes`) when one starts soon (lead time and
-  on/off are both settings). A single tap peeks at the full view for 10 seconds and returns; a
-  double-tap exits Focus mode for good. "Hide completed" applies to the subtask list here too.
+  item also reaches it, for any task, including ones without subtasks that you just want to read the
+  notes on.) Its own menu's **Focus** item switches to *Focus mode* — the title and the same checkable
+  subtasks in a tighter layout, for working heads-down, plus an upcoming-meeting banner
+  (`◆ Meeting in N minutes`) when one starts soon (on/off and lead time are both settings). With no tap
+  for 10s the screen blanks; any tap wakes it. A double-tap exits Focus mode for good.
 - **Channel filter**: phone setting listing every channel seen in today's tasks; check specific ones
   to show only those on the glasses, or leave all unchecked to show everything (the default, and
   what a brand-new channel falls back to automatically).
@@ -51,6 +51,12 @@ learn which list row is under the cursor without also firing that row's tap acti
 handled by firmware with no event sent to the app, so a `click` (which the Tasks screen already uses
 to toggle completion) is the only row-targeting signal that exists. Tap a task to interact with it,
 then use the menu's Open item to dive into it.
+
+**What "accepted meetings" counts.** Sunsama's calendar data carries no explicit RSVP/acceptance
+status. The Face screen counts today's non-all-day meetings that show as *busy* on your calendar
+(as opposed to *free*/transparent) — the closest available signal to "you're attending". A meeting
+you've declined typically shows as free and is excluded; verified against a real account where it
+correctly dropped the one meeting shown as free out of six.
 
 ## Develop
 

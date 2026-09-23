@@ -1,4 +1,18 @@
-import type { CalendarEvent, Priority, Profile, Subtask, Task, TaskProvider } from '../core/types'
+import type { CalendarEvent, Priority, Profile, Subtask, Task, TaskProvider, WeeklyObjective } from '../core/types'
+
+const OBJECTIVES: WeeklyObjective[] = [
+  { id: 'obj1', title: 'Ship the onboarding redesign', completed: true },
+  { id: 'obj2', title: 'Close out Q3 planning', completed: true },
+  { id: 'obj3', title: 'Hire the design lead', completed: false },
+  { id: 'obj4', title: 'Draft the roadmap review deck', completed: false },
+]
+
+/** A quiet, meeting-free day unless a scenario asks for one. */
+const BACKGROUND_MEETINGS: CalendarEvent[] = [
+  { id: 'ev-standup', title: 'Team standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false, isBusy: true },
+  { id: 'ev-1on1', title: '1:1', startTime: '2:00 PM', durationMin: 30, isMeeting: true, isAllDay: false, isBusy: true },
+  { id: 'ev-declined', title: 'Optional sync', startTime: '4:00 PM', durationMin: 30, isMeeting: true, isAllDay: false, isBusy: false },
+]
 
 interface Fixture {
   title: string
@@ -119,10 +133,17 @@ export class MockProvider implements TaskProvider {
 
   async getEventsForDay(_day: string): Promise<CalendarEvent[]> {
     await this.delay()
-    if (this.meetingInMin === undefined) return []
-    const start = new Date(Date.now() + this.meetingInMin * 60_000)
-    const event: CalendarEvent = { id: 'ev1', title: 'Standup', startTime: format12h(start), durationMin: 30, isMeeting: true, isAllDay: false }
-    return [event]
+    const events = BACKGROUND_MEETINGS.map(e => ({ ...e }))
+    if (this.meetingInMin !== undefined) {
+      const start = new Date(Date.now() + this.meetingInMin * 60_000)
+      events.push({ id: 'ev-soon', title: 'Standup', startTime: format12h(start), durationMin: 30, isMeeting: true, isAllDay: false, isBusy: true })
+    }
+    return events
+  }
+
+  async getWeeklyObjectives(_day: string): Promise<WeeklyObjective[]> {
+    await this.delay()
+    return OBJECTIVES.map(o => ({ ...o }))
   }
 
   async setCompleted(id: string, completed: boolean, _day: string): Promise<void> {

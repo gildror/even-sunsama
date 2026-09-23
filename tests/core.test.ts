@@ -6,7 +6,7 @@ import { SyncController } from '../src/core/sync'
 import { TaskStore } from '../src/core/taskStore'
 import { formatClock, msToNextMinute, parseTimeOfDay12h, todayInTz, zonedTimeToUtc } from '../src/core/time'
 import { AuthRequiredError } from '../src/core/types'
-import type { CalendarEvent, KeyValueStore, Priority, StoreState, Task, TaskProvider } from '../src/core/types'
+import type { CalendarEvent, KeyValueStore, Priority, StoreState, Task, TaskProvider, WeeklyObjective } from '../src/core/types'
 
 const task = (id: string, completed = false, priority: Priority = null, channel = ''): Task => ({
   id,
@@ -25,6 +25,7 @@ const state = (patch: Partial<StoreState> = {}): StoreState => ({
   tz: '',
   tasks: [],
   events: [],
+  objectives: [],
   pending: {},
   pendingSubtasks: {},
   status: 'idle',
@@ -45,11 +46,12 @@ class MemoryKv implements KeyValueStore {
   }
 }
 
-function fakeProvider(tasks: Task[], events: CalendarEvent[] = []) {
+function fakeProvider(tasks: Task[], events: CalendarEvent[] = [], objectives: WeeklyObjective[] = []) {
   return {
     getProfile: vi.fn(async () => ({ timezone: 'America/New_York' })),
     listTasks: vi.fn(async (_day: string) => tasks.map(t => ({ ...t, subtasks: t.subtasks.map(s => ({ ...s })) }))),
     getEventsForDay: vi.fn(async (_day: string) => events.map(e => ({ ...e }))),
+    getWeeklyObjectives: vi.fn(async (_day: string) => objectives.map(o => ({ ...o }))),
     setCompleted: vi.fn(async (_id: string, _completed: boolean, _day: string) => {}),
     setSubtaskCompleted: vi.fn(async (_taskId: string, _subtaskId: string, _completed: boolean) => {}),
   } satisfies TaskProvider
@@ -144,10 +146,10 @@ describe('selectors and summary', () => {
   it('finds the soonest meeting starting within the threshold, in the account timezone', () => {
     const now = new Date('2026-09-23T12:55:00Z') // 8:55 AM in New York
     const events: CalendarEvent[] = [
-      { id: '1', title: 'All day', startTime: '12:00 AM', durationMin: 0, isMeeting: true, isAllDay: true },
-      { id: '2', title: 'Focus block', startTime: '9:30 AM', durationMin: 30, isMeeting: false, isAllDay: false },
-      { id: '3', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false }, // 5 min away
-      { id: '4', title: 'Later sync', startTime: '10:00 AM', durationMin: 30, isMeeting: true, isAllDay: false },
+      { id: '1', title: 'All day', startTime: '12:00 AM', durationMin: 0, isMeeting: true, isAllDay: true, isBusy: true },
+      { id: '2', title: 'Focus block', startTime: '9:30 AM', durationMin: 30, isMeeting: false, isAllDay: false, isBusy: true },
+      { id: '3', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false, isBusy: true }, // 5 min away
+      { id: '4', title: 'Later sync', startTime: '10:00 AM', durationMin: 30, isMeeting: true, isAllDay: false, isBusy: true },
     ]
     const soon = nextMeetingSoon(events, '2026-09-23', 'America/New_York', now, 10)
     expect(soon).toEqual({ title: 'Standup', minutesUntil: 5, inProgress: false })
@@ -156,7 +158,7 @@ describe('selectors and summary', () => {
 
   it('flags an in-progress meeting instead of treating it as past', () => {
     const now = new Date('2026-09-23T13:05:00Z') // 9:05 AM in New York, 5 min into a 15-min meeting
-    const events: CalendarEvent[] = [{ id: '1', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false }]
+    const events: CalendarEvent[] = [{ id: '1', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false, isBusy: true }]
     expect(nextMeetingSoon(events, '2026-09-23', 'America/New_York', now, 10)).toEqual({ title: 'Standup', minutesUntil: 0, inProgress: true })
   })
 })
@@ -165,7 +167,7 @@ describe('TaskStore', () => {
   const now = () => new Date('2026-09-21T03:30:00Z') // still the 20th in New York
 
   it('refreshes using the day in the account timezone and caches tasks and events', async () => {
-    const events: CalendarEvent[] = [{ id: 'e1', title: 'Sync', startTime: '9:00 AM', durationMin: 30, isMeeting: true, isAllDay: false }]
+    const events: CalendarEvent[] = [{ id: 'e1', title: 'Sync', startTime: '9:00 AM', durationMin: 30, isMeeting: true, isAllDay: false, isBusy: true }]
     const provider = fakeProvider([task('a'), task('b', true)], events)
     const kv = new MemoryKv()
     const store = new TaskStore({ provider, kv, now })
