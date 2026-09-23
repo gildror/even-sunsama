@@ -63,7 +63,7 @@ async function getClient(meta) {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
-      client_name: 'Sunsama Tasks for Even G2 (personal)',
+      client_name: 'Tasks for Sunsama (Even G2, personal)',
       redirect_uris: [REDIRECT_URI],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],

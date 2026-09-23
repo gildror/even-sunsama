@@ -3,7 +3,7 @@ import { formatClock, formatDateShort } from '../../core/time'
 import type { Settings, StoreState } from '../../core/types'
 import type { GlassesInput } from '../events'
 import { GLYPHS, cleanTitle, statusMarker, truncateUtf8 } from '../format'
-import { buildMenu } from '../menu'
+import { MENU, buildMenu } from '../menu'
 import { SCREEN_H, SCREEN_W } from '../page'
 import type { PageSpec } from '../page'
 import type { Screen, ScreenContext } from './types'
@@ -81,6 +81,25 @@ export class FaceScreen implements Screen {
       case 'doubleClick':
         // Root screen: leave through the system exit dialog.
         this.ctx.exitApp()
+        return
+      case 'menu':
+        this.onMenu(input.itemID)
+        return
+      default:
+        return
+    }
+  }
+
+  private onMenu(itemID: number): void {
+    switch (itemID) {
+      case MENU.SWITCH:
+        this.ctx.go('tasks')
+        return
+      case MENU.REFRESH:
+        void this.ctx.sync.refreshNow()
+        return
+      case MENU.TOGGLE_COMPLETED:
+        this.ctx.settings.update({ showCompleted: !this.ctx.settings.get().showCompleted })
         return
       default:
         return

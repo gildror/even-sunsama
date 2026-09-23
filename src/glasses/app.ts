@@ -1,24 +1,27 @@
 import { msToNextMinute } from '../core/time'
-import type { ScreenName } from '../core/types'
 import { normalizeEvent } from './events'
 import type { GlassesInput, RawHubEvent } from './events'
-import { MENU } from './menu'
 import { FaceScreen } from './screens/face'
+import { FocusScreen } from './screens/focus'
 import { MessageScreen, messageFor } from './screens/message'
 import { TasksScreen } from './screens/tasks'
-import type { Screen, ScreenContext } from './screens/types'
+import type { Route, Screen, ScreenContext } from './screens/types'
 
-export type GlassesAppDeps = Omit<ScreenContext, 'go' | 'exitApp'>
+export type GlassesAppDeps = Omit<ScreenContext, 'go' | 'exitApp' | 'openFocus' | 'getFocusTaskId'>
 
 /**
- * Screen state machine for the glasses. Face is the root, Tasks its child; a
- * message screen takes over while there is nothing to show (signed out, first load).
+ * Screen state machine for the glasses. Face is the root, Tasks its child,
+ * Task View (Focus) a child of Tasks; a message screen takes over while
+ * there is nothing to show (signed out, first load). Each screen owns its
+ * own contextual-menu handling via onInput({t:'menu',...}) — there is no
+ * central menu dispatch, since different screens have different menus.
  */
 export class GlassesApp {
   private readonly ctx: ScreenContext
-  private readonly screens: Record<ScreenName | 'message', Screen>
+  private readonly screens: Record<Route | 'message', Screen>
   private current: Screen | null = null
-  private wanted: ScreenName
+  private wanted: Route
+  private focusTaskId: string | null = null
   private foreground = true
   private tickTimer: ReturnType<typeof setTimeout> | null = null
   private unsubscribe: Array<() => void> = []
@@ -30,6 +33,12 @@ export class GlassesApp {
         this.wanted = screen
         this.reconcile()
       },
+      openFocus: taskId => {
+        this.focusTaskId = taskId
+        this.wanted = 'focus'
+        this.reconcile()
+      },
+      getFocusTaskId: () => this.focusTaskId,
       exitApp: () => {
         deps.log('exit dialog requested')
         void deps.display.shutDown(1)
@@ -38,6 +47,7 @@ export class GlassesApp {
     this.screens = {
       face: new FaceScreen(this.ctx),
       tasks: new TasksScreen(this.ctx),
+      focus: new FocusScreen(this.ctx),
       message: new MessageScreen(this.ctx),
     }
     this.wanted = deps.settings.get().startScreen
@@ -61,9 +71,6 @@ export class GlassesApp {
 
   handleInput(input: GlassesInput): void {
     switch (input.t) {
-      case 'menu':
-        this.handleMenu(input.itemID)
-        return
       // Opening the contextual menu also fires exit/enter, so both must be idempotent.
       case 'fgExit':
         this.foreground = false
@@ -91,24 +98,6 @@ export class GlassesApp {
     this.unsubscribe.forEach(fn => fn())
     this.unsubscribe = []
     this.current?.exit()
-  }
-
-  private handleMenu(itemID: number): void {
-    const settings = this.ctx.settings
-    switch (itemID) {
-      case MENU.SWITCH:
-        this.ctx.go(this.wanted === 'tasks' ? 'face' : 'tasks')
-        return
-      case MENU.REFRESH:
-        this.ctx.log('menu refresh')
-        void this.ctx.sync.refreshNow()
-        return
-      case MENU.TOGGLE_COMPLETED:
-        settings.update({ showCompleted: !settings.get().showCompleted })
-        return
-      default:
-        return
-    }
   }
 
   /** Shows the screen the current state calls for, or lets the current one update itself. */

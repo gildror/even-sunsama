@@ -1,7 +1,7 @@
 import { CONNECT_URL_SHORT } from '../../core/config'
 import type { StoreState } from '../../core/types'
 import type { GlassesInput } from '../events'
-import { buildMenu } from '../menu'
+import { MENU, buildMenu } from '../menu'
 import { SCREEN_H, SCREEN_W } from '../page'
 import type { Screen, ScreenContext } from './types'
 
@@ -52,5 +52,6 @@ export class MessageScreen implements Screen {
     if (input.t === 'click') void this.ctx.sync.refreshNow()
     // Root screen: leave through the system exit dialog.
     if (input.t === 'doubleClick') this.ctx.exitApp()
+    if (input.t === 'menu' && input.itemID === MENU.REFRESH) void this.ctx.sync.refreshNow()
   }
 }

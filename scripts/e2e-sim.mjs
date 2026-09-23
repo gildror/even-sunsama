@@ -3,7 +3,8 @@
 // Drives the glasses through the simulator's automation API and asserts on the app's
 // console markers and on lit pixels in the glasses framebuffer.
 import { spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PNG } from 'pngjs'
@@ -108,14 +109,33 @@ async function launchSimulator(query = '') {
   return sim
 }
 
+/**
+ * The simulator keeps a real WebKit profile on disk across separate process launches (macOS:
+ * ~/Library/WebKit/evenhub-simulator), so our app's localStorage cache — correct, intentional
+ * behaviour on a real device — otherwise leaks between e2e runs and even between scenarios in the
+ * same run, making the very first render after a launch reflect a *previous* scenario's fixture.
+ * Wiping it before every run is what makes assertions on that first render reproducible.
+ */
+function clearSimulatorProfile() {
+  if (process.platform !== 'darwin') return
+  for (const dir of ['Library/WebKit/evenhub-simulator', 'Library/Caches/evenhub-simulator']) {
+    try {
+      rmSync(join(homedir(), dir), { recursive: true, force: true })
+    } catch {
+      // Best-effort: an e2e run is still meaningful without this, just noisier.
+    }
+  }
+}
+
 async function run() {
   mkdirSync(OUT, { recursive: true })
+  clearSimulatorProfile()
   console.log('Starting dev server (mock data) and simulator…')
   start('npx', ['vite', '--port', String(APP_PORT), '--strictPort'], { VITE_PROVIDER: 'mock' })
-  await waitFor('dev server', async () => (await (await fetch(APP)).text()).includes('Sunsama Tasks'))
+  await waitFor('dev server', async () => (await (await fetch(APP)).text()).includes('Tasks for Sunsama'))
 
   console.log('\nHappy path')
-  let sim = await launchSimulator()
+  let sim = await launchSimulator('?priority=flat')
   await expectLog('[app] screen=face open=3', 30_000)
   await sleep(1500) // images are pushed after the page
   const face = await screenshot('face')
@@ -149,7 +169,7 @@ async function run() {
   await waitFor('simulator shutdown', async () => !(await fetch(`${SIM}/api/ping`).then(r => r.ok).catch(() => false)))
 
   console.log('\nFailed check-off rolls back')
-  sim = await launchSimulator('?fail=toggle')
+  sim = await launchSimulator('?priority=flat&fail=toggle')
   await expectLog('[app] screen=face open=3', 30_000)
   await input('click')
   await expectLog('[app] screen=tasks rows=5')
@@ -157,6 +177,50 @@ async function run() {
   await expectLog('[store] toggle t1 -> true failed, rolled back')
   await sleep(800)
   await screenshot('tasks-after-rollback')
+  stop(sim)
+  await waitFor('simulator shutdown', async () => !(await fetch(`${SIM}/api/ping`).then(r => r.ok).catch(() => false)))
+
+  console.log('\nPriority grouping, Task View, subtasks and meeting reminder')
+  sim = await launchSimulator('?meeting=5')
+  await expectLog('[app] screen=face open=3', 30_000)
+  await input('click')
+  await expectLog('[app] screen=tasks') // exact row count is flaky here: this origin's localStorage still
+  // has the previous scenario's cache, so the very first render can reflect stale data for an instant,
+  // before the background refresh (already in flight) repaints with this scenario's fixture. The repaint
+  // is a plain rebuild with no log line of its own, so the screenshot below is what actually verifies it.
+  await sleep(700)
+  // Default fixture: 3 open tasks spanning 3 priorities -> 3 group headers + 3 open + 2 done.
+  const grouped = await screenshot('tasks-grouped')
+  const groupHeader = litPixels(grouped, { x: 0, y: 36, w: 200, h: 34 })
+  check('tasks: priority group header rendered', groupHeader > 200, `${groupHeader} lit px`)
+
+  // Row 0 is the "— Urgent —" header; row 1 is t1 (urgent, has subtasks). Select it, then open Task View.
+  await input('down')
+  await input('click')
+  await expectLog('[store] toggle t1 -> true ok')
+  await input('context_menu')
+  await input('down')
+  await input('down')
+  await input('down')
+  await input('click') // Tasks menu: Face, Refresh, Hide completed, Open
+  await expectLog('[app] screen=focus task=t1')
+  await screenshot('focus-full')
+
+  await input('click') // first subtask row
+  await expectLog('[store] toggle subtask t1-s1 -> false ok') // t1's first subtask starts completed
+
+  await input('context_menu')
+  await input('click') // Task View full-mode menu: Focus is first
+  await expectLog('[app] focus: mode=focus')
+  await sleep(600)
+  const minimal = await screenshot('focus-minimal')
+  const banner = litPixels(minimal, { x: 8, y: 8, w: 400, h: 28 })
+  check('focus minimal: meeting banner drawn', banner > 100, `${banner} lit px`)
+
+  await input('double_click') // exits focus mode back to full — immediate, not timer-dependent
+  await expectLog('[app] focus: mode=full')
+  await input('double_click') // full -> tasks
+  await expectLog('[app] screen=tasks')
   stop(sim)
 }
 

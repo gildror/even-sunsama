@@ -1,4 +1,7 @@
-import type { Profile, Task } from '../core/types'
+import type { CalendarEvent, Priority, Profile, Subtask, Task } from '../core/types'
+
+const PRIORITIES = new Set(['urgent', 'important', 'normal', 'low'])
+const parsePriority = (value: unknown): Priority => (typeof value === 'string' && PRIORITIES.has(value) ? (value as Priority) : null)
 
 export interface JsonRpcMessage {
   jsonrpc?: string
@@ -69,15 +72,38 @@ export function parseTasksResource(payload: unknown, day: string): Task[] {
     .filter(t => t && typeof t._id === 'string' && !t.deleted && !t.isArchived && !t.isBacklogged)
     .filter(t => !t.scheduledDate || t.scheduledDate === day)
     .map(t => {
-      const subtasks: any[] = Array.isArray(t.subtasks) ? t.subtasks : []
+      const rawSubtasks: any[] = Array.isArray(t.subtasks) ? t.subtasks : []
+      const subtasks: Subtask[] = rawSubtasks
+        .filter(s => s && typeof s._id === 'string')
+        .map(s => ({ id: s._id, title: String(s.title ?? '').trim() || '(untitled)', completed: Boolean(s.completed) }))
       return {
         id: t._id,
         title: String(t.title ?? '').trim() || '(untitled)',
         completed: Boolean(t.completed),
-        subtasksDone: subtasks.filter(s => s?.completed).length,
+        notes: typeof t.notes === 'string' ? t.notes : '',
+        subtasks,
+        subtasksDone: subtasks.filter(s => s.completed).length,
         subtasksTotal: subtasks.length,
+        priority: parsePriority(t.dailyPriority),
+        timeEstimate: typeof t.timeEstimate === 'string' && t.timeEstimate ? t.timeEstimate : undefined,
       }
     })
+}
+
+/** Payload of `sunsama://calendar/events/{day}` -> events for that day. */
+export function parseCalendarEvents(payload: unknown): CalendarEvent[] {
+  const list = Array.isArray(payload) ? payload : (payload as any)?.events
+  if (!Array.isArray(list)) throw new Error('Unexpected Sunsama calendar events response')
+  return list
+    .filter(e => e && typeof e.eventId === 'string' && typeof e.startTime === 'string')
+    .map(e => ({
+      id: e.eventId,
+      title: String(e.title ?? '').trim() || '(untitled)',
+      startTime: e.startTime,
+      durationMin: typeof e.duration === 'number' ? e.duration : 0,
+      isMeeting: Boolean(e.isMeeting),
+      isAllDay: Boolean(e.isAllDay),
+    }))
 }
 
 /** Payload of `sunsama://me` -> profile. */

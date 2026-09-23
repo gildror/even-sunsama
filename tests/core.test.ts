@@ -1,14 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { redact } from '../src/core/logger'
-import { nextTask, openCount, orderedTasks } from '../src/core/selectors'
+import { hasMixedPriorities, nextMeetingSoon, nextTask, openCount, orderedTasks } from '../src/core/selectors'
 import { getGlanceSummary } from '../src/core/summary'
 import { SyncController } from '../src/core/sync'
 import { TaskStore } from '../src/core/taskStore'
-import { formatClock, msToNextMinute, todayInTz } from '../src/core/time'
+import { formatClock, msToNextMinute, parseTimeOfDay12h, todayInTz, zonedTimeToUtc } from '../src/core/time'
 import { AuthRequiredError } from '../src/core/types'
-import type { KeyValueStore, Task, TaskProvider } from '../src/core/types'
+import type { CalendarEvent, KeyValueStore, Priority, StoreState, Task, TaskProvider } from '../src/core/types'
 
-const task = (id: string, completed = false): Task => ({ id, title: `Task ${id}`, completed, subtasksDone: 0, subtasksTotal: 0 })
+const task = (id: string, completed = false, priority: Priority = null): Task => ({
+  id,
+  title: `Task ${id}`,
+  completed,
+  notes: '',
+  subtasks: [],
+  subtasksDone: 0,
+  subtasksTotal: 0,
+  priority,
+})
+
+const state = (patch: Partial<StoreState> = {}): StoreState => ({
+  day: '',
+  tz: '',
+  tasks: [],
+  events: [],
+  pending: {},
+  pendingSubtasks: {},
+  status: 'idle',
+  auth: 'unknown',
+  ...patch,
+})
 
 class MemoryKv implements KeyValueStore {
   data = new Map<string, string>()
@@ -23,11 +44,13 @@ class MemoryKv implements KeyValueStore {
   }
 }
 
-function fakeProvider(tasks: Task[]) {
+function fakeProvider(tasks: Task[], events: CalendarEvent[] = []) {
   return {
     getProfile: vi.fn(async () => ({ timezone: 'America/New_York' })),
-    listTasks: vi.fn(async (_day: string) => tasks.map(t => ({ ...t }))),
+    listTasks: vi.fn(async (_day: string) => tasks.map(t => ({ ...t, subtasks: t.subtasks.map(s => ({ ...s })) }))),
+    getEventsForDay: vi.fn(async (_day: string) => events.map(e => ({ ...e }))),
     setCompleted: vi.fn(async (_id: string, _completed: boolean, _day: string) => {}),
+    setSubtaskCompleted: vi.fn(async (_taskId: string, _subtaskId: string, _completed: boolean) => {}),
   } satisfies TaskProvider
 }
 
@@ -48,38 +71,87 @@ describe('time', () => {
     expect(formatClock(new Date(2026, 0, 1, 0, 7), true)).toBe('00:07')
     expect(msToNextMinute(new Date(2026, 0, 1, 0, 0, 45, 500))).toBe(14_500)
   })
+
+  it('parses Sunsama event time strings, including noon/midnight', () => {
+    expect(parseTimeOfDay12h('9:00 AM')).toEqual({ h: 9, m: 0 })
+    expect(parseTimeOfDay12h('12:30 PM')).toEqual({ h: 12, m: 30 })
+    expect(parseTimeOfDay12h('12:00 AM')).toEqual({ h: 0, m: 0 })
+    expect(parseTimeOfDay12h('11:05 pm')).toEqual({ h: 23, m: 5 })
+    expect(parseTimeOfDay12h('not a time')).toBeNull()
+    expect(parseTimeOfDay12h('13:00 AM')).toBeNull()
+  })
+
+  it('converts a wall-clock time in a zone to the right absolute instant', () => {
+    // 9:00 AM in New York on 2026-09-23 is 13:00 UTC (EDT, UTC-4).
+    const instant = zonedTimeToUtc('2026-09-23', { h: 9, m: 0 }, 'America/New_York')
+    expect(instant.toISOString()).toBe('2026-09-23T13:00:00.000Z')
+    // Round-trips through a non-device zone too.
+    const tokyo = zonedTimeToUtc('2026-09-23', { h: 9, m: 0 }, 'Asia/Tokyo')
+    expect(tokyo.toISOString()).toBe('2026-09-23T00:00:00.000Z')
+  })
 })
 
 describe('selectors and summary', () => {
-  const tasks = [task('a', true), task('b'), task('c')]
   it('counts open tasks and finds the next one', () => {
+    const tasks = [task('a', true), task('b'), task('c')]
     expect(openCount(tasks)).toBe(2)
     expect(nextTask(tasks)?.id).toBe('b')
     expect(orderedTasks(tasks, true).map(t => t.id)).toEqual(['b', 'c', 'a'])
   })
 
-  it('summarises for glance surfaces', () => {
-    const base = { day: 'd', tz: 'UTC', tasks, pending: {}, status: 'idle' as const, auth: 'signedIn' as const }
-    expect(getGlanceSummary({ ...base, lastSyncAt: 1_000 }, 2_000)).toMatchObject({ openCount: 2, doneCount: 1, nextTitle: 'Task b', stale: false })
+  it('orders open tasks by priority, keeping Sunsama order within a priority', () => {
+    const tasks = [task('a', false, 'normal'), task('b', false, 'urgent'), task('c', false, 'important'), task('d', false, 'urgent')]
+    expect(orderedTasks(tasks, false).map(t => t.id)).toEqual(['b', 'd', 'c', 'a'])
+    expect(hasMixedPriorities(tasks)).toBe(true)
+    expect(hasMixedPriorities([task('a', false, 'normal'), task('b')])).toBe(false)
+    expect(hasMixedPriorities([task('a', true, 'urgent'), task('b', false, 'normal')])).toBe(false) // completed tasks don't count
+  })
+
+  it('summarises for glance surfaces using priority-ordered "next"', () => {
+    const tasks = [task('a', true), task('b', false, 'normal'), task('c', false, 'urgent')]
+    const base = state({ day: 'd', tz: 'UTC', tasks, auth: 'signedIn' })
+    expect(getGlanceSummary({ ...base, lastSyncAt: 1_000 }, 2_000)).toMatchObject({ openCount: 2, doneCount: 1, nextTitle: 'Task c', stale: false })
     expect(getGlanceSummary({ ...base, lastSyncAt: 1_000 }, 1_000 + 11 * 60_000).stale).toBe(true)
     expect(getGlanceSummary({ ...base, status: 'error' }, 0).stale).toBe(true)
+  })
+
+  it('finds the soonest meeting starting within the threshold, in the account timezone', () => {
+    const now = new Date('2026-09-23T12:55:00Z') // 8:55 AM in New York
+    const events: CalendarEvent[] = [
+      { id: '1', title: 'All day', startTime: '12:00 AM', durationMin: 0, isMeeting: true, isAllDay: true },
+      { id: '2', title: 'Focus block', startTime: '9:30 AM', durationMin: 30, isMeeting: false, isAllDay: false },
+      { id: '3', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false }, // 5 min away
+      { id: '4', title: 'Later sync', startTime: '10:00 AM', durationMin: 30, isMeeting: true, isAllDay: false },
+    ]
+    const soon = nextMeetingSoon(events, '2026-09-23', 'America/New_York', now, 10)
+    expect(soon).toEqual({ title: 'Standup', minutesUntil: 5, inProgress: false })
+    expect(nextMeetingSoon(events, '2026-09-23', 'America/New_York', now, 4)).toBeNull()
+  })
+
+  it('flags an in-progress meeting instead of treating it as past', () => {
+    const now = new Date('2026-09-23T13:05:00Z') // 9:05 AM in New York, 5 min into a 15-min meeting
+    const events: CalendarEvent[] = [{ id: '1', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false }]
+    expect(nextMeetingSoon(events, '2026-09-23', 'America/New_York', now, 10)).toEqual({ title: 'Standup', minutesUntil: 0, inProgress: true })
   })
 })
 
 describe('TaskStore', () => {
   const now = () => new Date('2026-09-21T03:30:00Z') // still the 20th in New York
 
-  it('refreshes using the day in the account timezone and caches the result', async () => {
-    const provider = fakeProvider([task('a'), task('b', true)])
+  it('refreshes using the day in the account timezone and caches tasks and events', async () => {
+    const events: CalendarEvent[] = [{ id: 'e1', title: 'Sync', startTime: '9:00 AM', durationMin: 30, isMeeting: true, isAllDay: false }]
+    const provider = fakeProvider([task('a'), task('b', true)], events)
     const kv = new MemoryKv()
     const store = new TaskStore({ provider, kv, now })
     await store.refresh()
     expect(provider.listTasks).toHaveBeenCalledWith('2026-09-20')
-    expect(store.getState()).toMatchObject({ day: '2026-09-20', tz: 'America/New_York', status: 'idle', auth: 'signedIn' })
+    expect(provider.getEventsForDay).toHaveBeenCalledWith('2026-09-20')
+    expect(store.getState()).toMatchObject({ day: '2026-09-20', tz: 'America/New_York', status: 'idle', auth: 'signedIn', events })
 
     const restored = new TaskStore({ provider, kv, now })
     await restored.hydrate()
     expect(restored.getState().tasks).toHaveLength(2)
+    expect(restored.getState().events).toEqual(events)
   })
 
   it("drops yesterday's cached tasks but keeps the timezone", async () => {
@@ -138,6 +210,61 @@ describe('TaskStore', () => {
     const store = new TaskStore({ provider, kv: new MemoryKv(), now })
     await expect(store.refresh()).rejects.toBeInstanceOf(AuthRequiredError)
     expect(store.getState().auth).toBe('expired')
+  })
+
+  describe('subtasks', () => {
+    const withSubtask = { ...task('a'), subtasks: [{ id: 's1', title: 'Sub', completed: false }], subtasksTotal: 1 }
+
+    it('toggles a subtask optimistically and recomputes the done count', async () => {
+      const provider = fakeProvider([withSubtask])
+      let finish!: () => void
+      provider.setSubtaskCompleted.mockImplementation(() => new Promise<void>(resolve => (finish = resolve)))
+      const store = new TaskStore({ provider, kv: new MemoryKv(), now })
+      await store.refresh()
+
+      const toggling = store.toggleSubtask('a', 's1')
+      expect(store.getState().tasks[0].subtasks[0].completed).toBe(true)
+      expect(store.getState().tasks[0].subtasksDone).toBe(1)
+      expect(store.getState().pendingSubtasks).toEqual({ s1: true })
+      expect(await store.toggleSubtask('a', 's1')).toBe(false) // ignored while pending
+      finish()
+      expect(await toggling).toBe(true)
+      expect(provider.setSubtaskCompleted).toHaveBeenCalledWith('a', 's1', true)
+      expect(store.getState().pendingSubtasks).toEqual({})
+    })
+
+    it('rolls back a failed subtask toggle', async () => {
+      const provider = fakeProvider([withSubtask])
+      provider.setSubtaskCompleted.mockRejectedValue(new Error('offline'))
+      const store = new TaskStore({ provider, kv: new MemoryKv(), now })
+      await store.refresh()
+      expect(await store.toggleSubtask('a', 's1')).toBe(false)
+      expect(store.getState().tasks[0].subtasks[0].completed).toBe(false)
+      expect(store.getState().tasks[0].subtasksDone).toBe(0)
+      expect(store.getState().pendingSubtasks).toEqual({})
+      expect(store.getState().lastToggleFailedAt).toBeDefined()
+    })
+
+    it('keeps a subtask toggle that is still in flight across a refresh', async () => {
+      const provider = fakeProvider([withSubtask])
+      let finish!: () => void
+      provider.setSubtaskCompleted.mockImplementation(() => new Promise<void>(resolve => (finish = resolve)))
+      const store = new TaskStore({ provider, kv: new MemoryKv(), now })
+      await store.refresh()
+      const toggling = store.toggleSubtask('a', 's1')
+      await store.refresh()
+      expect(store.getState().tasks[0].subtasks[0].completed).toBe(true)
+      expect(store.getState().tasks[0].subtasksDone).toBe(1)
+      finish()
+      await toggling
+    })
+
+    it('ignores a toggle for a subtask that does not exist', async () => {
+      const store = new TaskStore({ provider: fakeProvider([withSubtask]), kv: new MemoryKv(), now })
+      await store.refresh()
+      expect(await store.toggleSubtask('a', 'nope')).toBe(false)
+      expect(await store.toggleSubtask('missing-task', 's1')).toBe(false)
+    })
   })
 })
 

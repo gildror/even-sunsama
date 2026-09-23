@@ -3,10 +3,11 @@ import { AuthRequiredError } from '../src/core/types'
 import type { KeyValueStore } from '../src/core/types'
 import { McpClient } from '../src/sunsama/mcpClient'
 import { TokenManager, decodeBundle } from '../src/sunsama/oauth'
-import { McpToolError, parseMe, parseTasksResource, sseToMessages, unwrapResourceResult, unwrapToolResult } from '../src/sunsama/parse'
+import { McpToolError, parseCalendarEvents, parseMe, parseTasksResource, sseToMessages, unwrapResourceResult, unwrapToolResult } from '../src/sunsama/parse'
 import { SunsamaProvider } from '../src/sunsama/sunsamaProvider'
 import meFixture from '../src/sunsama/__fixtures__/me.json'
 import tasksFixture from '../src/sunsama/__fixtures__/tasks.json'
+import calendarFixture from '../src/sunsama/__fixtures__/calendar-events.json'
 
 class MemoryKv implements KeyValueStore {
   data = new Map<string, string>()
@@ -30,8 +31,30 @@ describe('parse', () => {
     const tasks = parseTasksResource(tasksFixture, '2026-09-20')
     expect(tasks.map(t => t.id)).toEqual(['t-open', 't-subtasks', 't-done'])
     expect(tasks[1]).toMatchObject({ subtasksDone: 1, subtasksTotal: 3, completed: false })
+    expect(tasks[1].subtasks).toEqual([
+      { id: 's1', title: 'Inbox zero', completed: true },
+      { id: 's2', title: 'Review calendar', completed: false },
+      { id: 's3', title: 'Review goals', completed: false },
+    ])
     expect(tasks[2].completed).toBe(true)
     expect(() => parseTasksResource({ nope: true }, '2026-09-20')).toThrow()
+  })
+
+  it('carries priority, notes and time estimate through, defaulting when absent', () => {
+    const tasks = parseTasksResource(tasksFixture, '2026-09-20')
+    expect(tasks[0]).toMatchObject({ priority: 'urgent', timeEstimate: '1 hours' })
+    expect(tasks[0].notes).toContain('Focus')
+    expect(tasks[1]).toMatchObject({ priority: null, notes: '', timeEstimate: undefined })
+  })
+
+  it('parses calendar events, keeping raw start times and meeting/all-day flags', () => {
+    const events = parseCalendarEvents(calendarFixture)
+    expect(events).toEqual([
+      { id: 'ev-allday', title: 'Out of office', startTime: '12:00 AM', durationMin: 0, isMeeting: false, isAllDay: true },
+      { id: 'ev-meeting', title: 'Standup', startTime: '9:00 AM', durationMin: 15, isMeeting: true, isAllDay: false },
+      { id: 'ev-focus', title: 'Focus block', startTime: '10:00 AM', durationMin: 60, isMeeting: false, isAllDay: false },
+    ])
+    expect(() => parseCalendarEvents({ nope: true })).toThrow()
   })
 
   it('reads the timezone from the profile', () => {
@@ -122,12 +145,13 @@ function fakeServer(options: { sse?: boolean; resources?: boolean } = {}) {
     if (body.method === 'notifications/initialized') return new Response(null, { status: 202 })
     if (headers['mcp-session-id'] !== state.session) return new Response('Session not found', { status: 404 })
 
+    const fixtureFor = (uri: string) => (uri.endsWith('/me') ? meFixture : uri.includes('/calendar/') ? calendarFixture : tasksFixture)
     let result: unknown
     if (body.method === 'resources/read') {
       if (!state.resources) return json({ jsonrpc: '2.0', id: body.id, error: { code: -32601, message: 'Method not found' } })
-      result = { contents: [{ uri: body.params.uri, text: JSON.stringify(body.params.uri.endsWith('/me') ? meFixture : tasksFixture) }] }
+      result = { contents: [{ uri: body.params.uri, text: JSON.stringify(fixtureFor(body.params.uri)) }] }
     } else if (body.params.name === 'read_resource') {
-      result = { content: [{ type: 'text', text: JSON.stringify(body.params.arguments.uri.endsWith('/me') ? meFixture : tasksFixture) }] }
+      result = { content: [{ type: 'text', text: JSON.stringify(fixtureFor(body.params.arguments.uri)) }] }
     } else {
       result = { content: [{ type: 'text', text: JSON.stringify({ success: true }) }] }
     }
@@ -169,6 +193,24 @@ describe('McpClient + SunsamaProvider', () => {
     const bodies = server.fetchFn.mock.calls.map(c => JSON.parse(String(c[1]?.body))).filter(b => b.method === 'tools/call')
     expect(bodies[0].params).toEqual({ name: 'mark_task_as_completed', arguments: { taskId: 't1', finishedDay: '2026-09-20' } })
     expect(bodies[1].params).toEqual({ name: 'mark_task_as_incomplete', arguments: { taskId: 't1' } })
+  })
+
+  it('marks a subtask complete or incomplete with both ids', async () => {
+    const server = fakeServer()
+    const provider = new SunsamaProvider(clientFor(server))
+    await provider.setSubtaskCompleted('t1', 's1', true)
+    await provider.setSubtaskCompleted('t1', 's1', false)
+    const bodies = server.fetchFn.mock.calls.map(c => JSON.parse(String(c[1]?.body))).filter(b => b.method === 'tools/call')
+    expect(bodies[0].params).toEqual({ name: 'mark_subtask_as_completed', arguments: { taskId: 't1', subtaskId: 's1' } })
+    expect(bodies[1].params).toEqual({ name: 'mark_subtask_as_incomplete', arguments: { taskId: 't1', subtaskId: 's1' } })
+  })
+
+  it('fetches and parses calendar events for a day', async () => {
+    const server = fakeServer()
+    const provider = new SunsamaProvider(clientFor(server))
+    const events = await provider.getEventsForDay('2026-09-20')
+    expect(events).toHaveLength(3)
+    expect(events.find(e => e.id === 'ev-meeting')).toMatchObject({ isMeeting: true, startTime: '9:00 AM' })
   })
 
   it('falls back to the read_resource tool when resources/read is unsupported, and remembers it', async () => {

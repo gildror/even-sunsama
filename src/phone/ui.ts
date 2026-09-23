@@ -84,7 +84,7 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
   function renderTasks(): void {
     const s = store.getState()
     tasksEl.replaceChildren(
-      ...orderedTasks(s.tasks, true).map(task => {
+      ...orderedTasks(s.tasks, settings.get().showCompleted).map(task => {
         const li = document.createElement('li')
         const label = document.createElement('label')
         const box = document.createElement('input')
@@ -144,7 +144,10 @@ export function mountPhoneUi(deps: PhoneUiDeps): { focusConnect(): void } {
     renderStatus()
     renderTasks()
   })
-  settings.subscribe(renderSettings)
+  settings.subscribe(() => {
+    renderSettings()
+    renderTasks() // "Show completed tasks" changes which rows this list should have
+  })
   logger.subscribe(() => {
     logEl.textContent = logger.getLines().join('\n')
   })

@@ -1,8 +1,8 @@
-import { orderedTasks } from '../../core/selectors'
-import type { StoreState } from '../../core/types'
+import { doneTasks, hasMixedPriorities, nextTask, orderedTasks } from '../../core/selectors'
+import type { Priority, StoreState, Task } from '../../core/types'
 import type { GlassesInput } from '../events'
-import { GLYPHS, headerLine, taskRowLabel } from '../format'
-import { buildMenu } from '../menu'
+import { GLYPHS, headerLine, priorityLabel, taskRowLabel } from '../format'
+import { MENU, buildMenu } from '../menu'
 import { SCREEN_W } from '../page'
 import type { PageSpec } from '../page'
 import type { Screen, ScreenContext } from './types'
@@ -13,7 +13,7 @@ export const MAX_ROWS = 20
 export const PAGE_SIZE = 18
 const FAILED_FLAG_MS = 3_100
 
-export type Row = { k: 'task'; id: string } | { k: 'prev' } | { k: 'next' }
+export type Row = { k: 'task'; id: string } | { k: 'prev' } | { k: 'next' } | { k: 'group'; priority: Priority }
 
 export interface TasksView {
   header: string
@@ -25,38 +25,72 @@ export interface TasksView {
   pageCount: number
 }
 
-/** Pure view-model for the task list: open first, completed after, paged beyond 20 rows. */
+function buildOpenRows(tasks: Task[], grouped: boolean): { rows: Row[]; itemNames: string[] } {
+  const rows: Row[] = []
+  const itemNames: string[] = []
+  let currentKey: string | null = null
+  for (const task of tasks) {
+    if (grouped) {
+      const key = task.priority ?? 'normal'
+      if (key !== currentKey) {
+        currentKey = key
+        rows.push({ k: 'group', priority: task.priority })
+        itemNames.push(`— ${priorityLabel(task.priority)} —`)
+      }
+    }
+    rows.push({ k: 'task', id: task.id })
+    itemNames.push(taskRowLabel(task))
+  }
+  return { rows, itemNames }
+}
+
+/**
+ * Pure view-model for the task list: open first (grouped by priority when
+ * more than one is in play and it still fits on one page), completed after,
+ * paged beyond 20 rows. Pagination falls back to a flat list — see buildTasksView.
+ */
 export function buildTasksView(state: StoreState, showCompleted: boolean, page: number, now: number): TasksView {
   const header = headerLine(state, now)
-  const tasks = orderedTasks(state.tasks, showCompleted)
+  const openSorted = orderedTasks(state.tasks, false)
+  const done = showCompleted ? doneTasks(state.tasks) : []
+  const doneRows: Row[] = done.map(t => ({ k: 'task', id: t.id }))
+  const doneNames = done.map(taskRowLabel)
 
-  if (tasks.length === 0) {
+  if (openSorted.length + done.length === 0) {
     const emptyMessage = state.tasks.length === 0 ? 'No tasks today' : `All done (${state.tasks.length}) ★`
     return { header, rows: [], itemNames: [], emptyMessage, page: 0, pageCount: 1 }
   }
 
-  if (tasks.length <= MAX_ROWS) {
-    return { header, rows: tasks.map(t => ({ k: 'task', id: t.id })), itemNames: tasks.map(taskRowLabel), page: 0, pageCount: 1 }
+  if (hasMixedPriorities(state.tasks)) {
+    const grouped = buildOpenRows(openSorted, true)
+    const rows = [...grouped.rows, ...doneRows]
+    const itemNames = [...grouped.itemNames, ...doneNames]
+    if (rows.length <= MAX_ROWS) return { header, rows, itemNames, page: 0, pageCount: 1 }
+    // Headers would push this past the row budget: fall through to the flat, paginated list below.
   }
 
-  const pageCount = Math.ceil(tasks.length / PAGE_SIZE)
+  const flat = buildOpenRows(openSorted, false)
+  const rows = [...flat.rows, ...doneRows]
+  const itemNames = [...flat.itemNames, ...doneNames]
+  if (rows.length <= MAX_ROWS) return { header, rows, itemNames, page: 0, pageCount: 1 }
+
+  const pageCount = Math.ceil(rows.length / PAGE_SIZE)
   const current = Math.min(Math.max(page, 0), pageCount - 1)
-  const slice = tasks.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
-  const rows: Row[] = []
-  const itemNames: string[] = []
+  const sliceRows = rows.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
+  const sliceNames = itemNames.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
+  const pagedRows: Row[] = []
+  const pagedNames: string[] = []
   if (current > 0) {
-    rows.push({ k: 'prev' })
-    itemNames.push(`${GLYPHS.up} Prev (${current}/${pageCount})`)
+    pagedRows.push({ k: 'prev' })
+    pagedNames.push(`${GLYPHS.up} Prev (${current}/${pageCount})`)
   }
-  for (const task of slice) {
-    rows.push({ k: 'task', id: task.id })
-    itemNames.push(taskRowLabel(task))
-  }
+  pagedRows.push(...sliceRows)
+  pagedNames.push(...sliceNames)
   if (current < pageCount - 1) {
-    rows.push({ k: 'next' })
-    itemNames.push(`${GLYPHS.down} Next (${current + 2}/${pageCount})`)
+    pagedRows.push({ k: 'next' })
+    pagedNames.push(`${GLYPHS.down} Next (${current + 2}/${pageCount})`)
   }
-  return { header, rows, itemNames, page: current, pageCount }
+  return { header, rows: pagedRows, itemNames: pagedNames, page: current, pageCount }
 }
 
 const HDR = { id: 1, name: 'hdr' }
@@ -67,6 +101,8 @@ export class TasksScreen implements Screen {
   private pageKey = ''
   private page = 0
   private failedTimer: ReturnType<typeof setTimeout> | null = null
+  /** The task the "Open" menu item targets — the only row-targeting signal the platform gives us (see README). */
+  private lastSelectedTaskId: string | null = null
 
   constructor(private readonly ctx: ScreenContext) {}
 
@@ -111,6 +147,31 @@ export class TasksScreen implements Screen {
       case 'listSelect':
         this.select(input.index, input.name)
         return
+      case 'menu':
+        this.onMenu(input.itemID)
+        return
+      default:
+        return
+    }
+  }
+
+  private onMenu(itemID: number): void {
+    switch (itemID) {
+      case MENU.SWITCH:
+        this.ctx.go('face')
+        return
+      case MENU.REFRESH:
+        void this.ctx.sync.refreshNow()
+        return
+      case MENU.TOGGLE_COMPLETED:
+        this.ctx.settings.update({ showCompleted: !this.ctx.settings.get().showCompleted })
+        return
+      case MENU.OPEN: {
+        // No prior tap this session: fall back to the top open task instead of doing nothing.
+        const id = this.lastSelectedTaskId ?? nextTask(orderedTasks(this.ctx.store.getState().tasks, false))?.id
+        if (id) this.ctx.openFocus(id)
+        return
+      }
       default:
         return
     }
@@ -126,11 +187,13 @@ export class TasksScreen implements Screen {
       return
     }
     if (row.k === 'task') {
+      this.lastSelectedTaskId = row.id
       void this.ctx.store.toggle(row.id)
-    } else {
+    } else if (row.k === 'prev' || row.k === 'next') {
       this.page = view.page + (row.k === 'next' ? 1 : -1)
       this.render()
     }
+    // 'group' header rows are informational only.
   }
 
   /** Lists cannot change in place: rebuild when rows change, otherwise only touch the header. */

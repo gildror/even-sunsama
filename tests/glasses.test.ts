@@ -1,18 +1,41 @@
 import { describe, expect, it } from 'vitest'
-import type { StoreState, Task } from '../src/core/types'
+import { DEFAULT_SETTINGS } from '../src/core/settings'
+import type { Priority, StoreState, Subtask, Task } from '../src/core/types'
 import { Os, normalizeEvent } from '../src/glasses/events'
-import { LIST_ITEM_MAX_BYTES, cleanTitle, headerLine, taskRowLabel, truncateUtf8, utf8Length } from '../src/glasses/format'
+import {
+  LIST_ITEM_MAX_BYTES,
+  cleanTitle,
+  formatMeetingBanner,
+  headerLine,
+  priorityLabel,
+  priorityPrefix,
+  stripHtml,
+  subtaskRowLabel,
+  taskRowLabel,
+  truncateUtf8,
+  utf8Length,
+} from '../src/glasses/format'
 import { buildFaceView } from '../src/glasses/screens/face'
 import { messageFor } from '../src/glasses/screens/message'
 import { MAX_ROWS, PAGE_SIZE, buildTasksView } from '../src/glasses/screens/tasks'
-import { DEFAULT_SETTINGS } from '../src/core/settings'
 
-const task = (id: string, completed = false, title = `Task ${id}`): Task => ({ id, title, completed, subtasksDone: 0, subtasksTotal: 0 })
+const task = (id: string, completed = false, title = `Task ${id}`, priority: Priority = null): Task => ({
+  id,
+  title,
+  completed,
+  notes: '',
+  subtasks: [],
+  subtasksDone: 0,
+  subtasksTotal: 0,
+  priority,
+})
 const state = (tasks: Task[], patch: Partial<StoreState> = {}): StoreState => ({
   day: '2026-09-20',
   tz: 'America/New_York',
   tasks,
+  events: [],
   pending: {},
+  pendingSubtasks: {},
   status: 'idle',
   lastSyncAt: 1_000,
   auth: 'signedIn',
@@ -74,6 +97,42 @@ describe('format', () => {
     expect(taskRowLabel(task('2', true, 'Done'))).toBe('● Done')
   })
 
+  it('prefixes rows by priority and stays within budget even for urgent + subtasks', () => {
+    expect(priorityPrefix('urgent')).toBe('!! ')
+    expect(priorityPrefix('important')).toBe('! ')
+    expect(priorityPrefix('low')).toBe('· ')
+    expect(priorityPrefix('normal')).toBe('')
+    expect(priorityPrefix(null)).toBe('')
+    expect(priorityLabel('urgent')).toBe('Urgent')
+    expect(priorityLabel(null)).toBe('Normal')
+
+    const urgent = { ...task('1', false, 'x'.repeat(200), 'urgent'), subtasksDone: 1, subtasksTotal: 9 }
+    const label = taskRowLabel(urgent)
+    expect(utf8Length(label)).toBeLessThanOrEqual(LIST_ITEM_MAX_BYTES)
+    expect(label.startsWith('○ !! ')).toBe(true)
+    expect(label.endsWith(' (1/9)')).toBe(true)
+  })
+
+  it('formats subtask rows without counts or priority', () => {
+    const subtask: Subtask = { id: 's1', title: 'x'.repeat(200), completed: true }
+    const label = subtaskRowLabel(subtask)
+    expect(utf8Length(label)).toBeLessThanOrEqual(LIST_ITEM_MAX_BYTES)
+    expect(label.startsWith('● ')).toBe(true)
+  })
+
+  it('strips Sunsama rich-text HTML down to plain lines', () => {
+    expect(stripHtml('<p><strong>Planned</strong></p><ul><li>One</li><li>Two</li></ul>')).toBe('Planned\n• One\n• Two')
+    expect(stripHtml('Line one<br/>Line two &amp; more &nbsp;padded')).toBe('Line one\nLine two & more  padded')
+    expect(stripHtml('')).toBe('')
+    expect(stripHtml('<p></p>')).toBe('')
+  })
+
+  it('formats the meeting banner', () => {
+    expect(formatMeetingBanner({ title: 'Standup', minutesUntil: 10, inProgress: false })).toBe('◆ Meeting in 10 minutes')
+    expect(formatMeetingBanner({ title: 'Standup', minutesUntil: 1, inProgress: false })).toBe('◆ Meeting in 1 minute')
+    expect(formatMeetingBanner({ title: 'Standup', minutesUntil: 0, inProgress: true })).toBe('◆ Meeting now')
+  })
+
   it('builds the header with counts and status markers', () => {
     const tasks = [task('1'), task('2', true)]
     expect(headerLine(state(tasks), 2_000)).toBe('Sun 20 Sep  1 open · 1 done')
@@ -97,6 +156,32 @@ describe('buildTasksView', () => {
     expect(buildTasksView(state([task('a', true)]), false, 0, 2_000).emptyMessage).toContain('All done (1)')
   })
 
+  it('groups open tasks by priority with header rows when it fits on one page', () => {
+    const tasks = [task('a', false, 'A', 'normal'), task('b', false, 'B', 'urgent'), task('c', false, 'C', 'important')]
+    const view = buildTasksView(state(tasks), true, 0, 0)
+    expect(view.rows).toEqual([
+      { k: 'group', priority: 'urgent' },
+      { k: 'task', id: 'b' },
+      { k: 'group', priority: 'important' },
+      { k: 'task', id: 'c' },
+      { k: 'group', priority: 'normal' },
+      { k: 'task', id: 'a' },
+    ])
+    expect(view.itemNames[0]).toBe('— Urgent —')
+  })
+
+  it('falls back to a flat list when a single priority is in play', () => {
+    const tasks = [task('a', false, 'A', 'normal'), task('b', false, 'B', 'normal')]
+    expect(buildTasksView(state(tasks), true, 0, 0).rows.every(r => r.k === 'task')).toBe(true)
+  })
+
+  it('drops group headers instead of overflowing the row budget', () => {
+    const many = Array.from({ length: MAX_ROWS }, (_, i) => task(String(i), false, `T${i}`, i % 2 === 0 ? 'urgent' : 'low'))
+    const view = buildTasksView(state(many), true, 0, 0)
+    expect(view.rows.every(r => r.k === 'task')).toBe(true) // headers would have pushed this over 20
+    expect(view.rows).toHaveLength(MAX_ROWS)
+  })
+
   it('fits exactly 20 tasks on one page and pages beyond that', () => {
     const many = (n: number) => Array.from({ length: n }, (_, i) => task(String(i)))
     expect(buildTasksView(state(many(MAX_ROWS)), true, 0, 0).rows).toHaveLength(MAX_ROWS)
@@ -118,10 +203,11 @@ describe('buildTasksView', () => {
 })
 
 describe('face and message views', () => {
-  it('puts the open count and the next task on the face', () => {
+  it('puts the open count and the highest-priority next task on the face', () => {
     const now = new Date(2026, 8, 20, 14, 5)
-    const view = buildFaceView(state([task('a', true), task('b', false, '🎯 Plan week')], { lastSyncAt: now.getTime() }), DEFAULT_SETTINGS, now)
-    expect(view).toMatchObject({ count: '1', caption: 'open · 1 done', clock: '2:05', date: 'Sun 20 Sep', next: '▶ Plan week', status: '' })
+    const tasks = [task('a', true), task('b', false, '🎯 Plan week', 'normal'), task('c', false, 'Urgent thing', 'urgent')]
+    const view = buildFaceView(state(tasks, { lastSyncAt: now.getTime() }), DEFAULT_SETTINGS, now)
+    expect(view).toMatchObject({ count: '2', caption: 'open · 1 done', clock: '2:05', date: 'Sun 20 Sep', next: '▶ Urgent thing', status: '' })
     expect(buildFaceView(state([task('a', true)]), { ...DEFAULT_SETTINGS, clock24h: true }, now)).toMatchObject({ count: '0', caption: 'all done · 1', clock: '14:05', next: '' })
   })
 

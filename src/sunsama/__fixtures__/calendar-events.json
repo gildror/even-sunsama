@@ -1,0 +1,7 @@
+{
+  "events": [
+    { "eventId": "ev-allday", "title": "Out of office", "startTime": "12:00 AM", "duration": 0, "isAllDay": true, "isMeeting": false },
+    { "eventId": "ev-meeting", "title": "Standup", "startTime": "9:00 AM", "duration": 15, "isAllDay": false, "isMeeting": true },
+    { "eventId": "ev-focus", "title": "Focus block", "startTime": "10:00 AM", "duration": 60, "isAllDay": false, "isMeeting": false }
+  ]
+}

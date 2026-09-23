@@ -1,7 +1,7 @@
-import type { Profile, Task, TaskProvider } from '../core/types'
+import type { CalendarEvent, Profile, Task, TaskProvider } from '../core/types'
 import { McpRpcError } from './mcpClient'
 import type { McpClient } from './mcpClient'
-import { parseMe, parseTasksResource } from './parse'
+import { parseCalendarEvents, parseMe, parseTasksResource } from './parse'
 
 /** Sunsama through its official MCP server. */
 export class SunsamaProvider implements TaskProvider {
@@ -18,12 +18,21 @@ export class SunsamaProvider implements TaskProvider {
     return parseTasksResource(await this.read(`sunsama://tasks/${day}`), day)
   }
 
+  async getEventsForDay(day: string): Promise<CalendarEvent[]> {
+    return parseCalendarEvents(await this.read(`sunsama://calendar/events/${day}`))
+  }
+
   async setCompleted(id: string, completed: boolean, day: string): Promise<void> {
     if (completed) {
       await this.client.callTool('mark_task_as_completed', { taskId: id, finishedDay: day })
     } else {
       await this.client.callTool('mark_task_as_incomplete', { taskId: id })
     }
+  }
+
+  async setSubtaskCompleted(taskId: string, subtaskId: string, completed: boolean): Promise<void> {
+    const tool = completed ? 'mark_subtask_as_completed' : 'mark_subtask_as_incomplete'
+    await this.client.callTool(tool, { taskId, subtaskId })
   }
 
   private async read(uri: string): Promise<unknown> {

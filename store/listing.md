@@ -13,8 +13,10 @@ Today's Sunsama tasks on your glasses. Tap to check them off.
 See today's Sunsama task list on your Even G2 and tick tasks off with a tap, phone in your pocket.
 
 - Glance screen: how many tasks are still open, the time, and the next task up.
-- Task list: today's tasks with open ones first and subtask progress. Tap a task to complete it; tap again to reopen it. Changes sync to Sunsama right away.
-- Long-press menu: switch screens, refresh, hide completed tasks.
+- Task list: today's tasks with open ones first, grouped by priority, and subtask progress. Tap a task to complete it; tap again to reopen it. Changes sync to Sunsama right away.
+- Task View: open a task's full description and subtasks, and check subtasks off individually.
+- Focus mode: a distraction-free view showing just the clock and task name, with a heads-up banner when a meeting is starting soon. Tap to peek at the full view, double-tap to come back.
+- Contextual menu on every screen: switch screens, refresh, hide completed tasks, open a task.
 - Works offline from the last sync and never shows a blank screen.
 
 Setup takes a minute: sign in to Sunsama on the phone at gildror.github.io/even-sunsama, paste the code into the plugin, done. Your tasks go directly between your phone and Sunsama; there is no third-party server.
@@ -22,7 +24,7 @@ Setup takes a minute: sign in to Sunsama on the phone at gildror.github.io/even-
 Requires a Sunsama account on the Pro plan (Sunsama's app access is a Pro feature). Not affiliated with Sunsama.
 
 ## Changelog 1.0.0
-First release: glance screen, task list with tap-to-complete, contextual menu, offline cache.
+First release: glance screen, priority-grouped task list with tap-to-complete, Task View with subtasks, Focus mode with meeting reminders, contextual menu, offline cache.
 
 ## Assets
 - **Icon / "foreground"**: `store/icon-store-24x24.png` (identical to `public/icon.png`, the one packed

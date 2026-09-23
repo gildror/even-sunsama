@@ -1,15 +1,96 @@
 {
   "tasks": [
-    { "_id": "t-open", "title": "Write report", "completed": false, "deleted": false, "isArchived": false, "isBacklogged": false, "scheduledDate": "2026-09-20", "timeEstimate": "1 hours", "sortOrder": 1024, "subtasks": [], "channel": "work" },
-    { "_id": "t-subtasks", "title": "🎯 Weekly Prep", "completed": false, "deleted": false, "isArchived": false, "isBacklogged": false, "scheduledDate": "2026-09-20", "subtasks": [
-      { "_id": "s1", "title": "Inbox zero", "completed": true },
-      { "_id": "s2", "title": "Review calendar", "completed": false },
-      { "_id": "s3", "title": "Review goals", "completed": false }
-    ] },
-    { "_id": "t-done", "title": "Make bread", "completed": true, "completedOnDate": "2026-09-20", "completedAt": "2026-09-20T17:34:57.864Z", "deleted": false, "isArchived": false, "isBacklogged": false, "scheduledDate": "2026-09-20", "subtasks": [] },
-    { "_id": "t-deleted", "title": "Deleted task", "completed": false, "deleted": true, "isArchived": false, "isBacklogged": false, "scheduledDate": "2026-09-20", "subtasks": [] },
-    { "_id": "t-archived", "title": "Archived task", "completed": false, "deleted": false, "isArchived": true, "isBacklogged": false, "scheduledDate": "2026-09-20", "subtasks": [] },
-    { "_id": "t-backlog", "title": "Backlog task", "completed": false, "deleted": false, "isArchived": false, "isBacklogged": true, "subtasks": [] },
-    { "_id": "t-otherday", "title": "Tomorrow's task", "completed": false, "deleted": false, "isArchived": false, "isBacklogged": false, "scheduledDate": "2026-09-21", "subtasks": [] }
+    {
+      "_id": "t-open",
+      "title": "Write report",
+      "completed": false,
+      "deleted": false,
+      "isArchived": false,
+      "isBacklogged": false,
+      "scheduledDate": "2026-09-20",
+      "timeEstimate": "1 hours",
+      "sortOrder": 1024,
+      "subtasks": [],
+      "channel": "work",
+      "dailyPriority": "urgent",
+      "notes": "<p><strong>Focus</strong> on the Q3 numbers.</p><ul><li>Check variance</li></ul>"
+    },
+    {
+      "_id": "t-subtasks",
+      "title": "\ud83c\udfaf Weekly Prep",
+      "completed": false,
+      "deleted": false,
+      "isArchived": false,
+      "isBacklogged": false,
+      "scheduledDate": "2026-09-20",
+      "subtasks": [
+        {
+          "_id": "s1",
+          "title": "Inbox zero",
+          "completed": true
+        },
+        {
+          "_id": "s2",
+          "title": "Review calendar",
+          "completed": false
+        },
+        {
+          "_id": "s3",
+          "title": "Review goals",
+          "completed": false
+        }
+      ]
+    },
+    {
+      "_id": "t-done",
+      "title": "Make bread",
+      "completed": true,
+      "completedOnDate": "2026-09-20",
+      "completedAt": "2026-09-20T17:34:57.864Z",
+      "deleted": false,
+      "isArchived": false,
+      "isBacklogged": false,
+      "scheduledDate": "2026-09-20",
+      "subtasks": []
+    },
+    {
+      "_id": "t-deleted",
+      "title": "Deleted task",
+      "completed": false,
+      "deleted": true,
+      "isArchived": false,
+      "isBacklogged": false,
+      "scheduledDate": "2026-09-20",
+      "subtasks": []
+    },
+    {
+      "_id": "t-archived",
+      "title": "Archived task",
+      "completed": false,
+      "deleted": false,
+      "isArchived": true,
+      "isBacklogged": false,
+      "scheduledDate": "2026-09-20",
+      "subtasks": []
+    },
+    {
+      "_id": "t-backlog",
+      "title": "Backlog task",
+      "completed": false,
+      "deleted": false,
+      "isArchived": false,
+      "isBacklogged": true,
+      "subtasks": []
+    },
+    {
+      "_id": "t-otherday",
+      "title": "Tomorrow's task",
+      "completed": false,
+      "deleted": false,
+      "isArchived": false,
+      "isBacklogged": false,
+      "scheduledDate": "2026-09-21",
+      "subtasks": []
+    }
   ]
 }
